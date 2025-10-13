@@ -9,7 +9,16 @@ import {
   onSnapshot,
   orderBy,
 } from "firebase/firestore";
-import { Container, Row, Col, Card, Button, Spinner, Badge } from "react-bootstrap";
+import {
+  Container,
+  Row,
+  Col,
+  Card,
+  Button,
+  Spinner,
+  Badge,
+  Form,
+} from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 
 export default function DoctorDashboard() {
@@ -17,6 +26,7 @@ export default function DoctorDashboard() {
   const [appointments, setAppointments] = useState([]);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("all"); // appointment filter
 
   const navigate = useNavigate();
   const user = auth.currentUser;
@@ -29,14 +39,11 @@ export default function DoctorDashboard() {
       try {
         const docRef = doc(db, "doctors", user.uid);
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          setDoctor({ id: docSnap.id, ...docSnap.data() });
-        }
+        if (docSnap.exists()) setDoctor({ id: docSnap.id, ...docSnap.data() });
       } catch (err) {
         console.error("Error fetching doctor profile:", err);
       }
     };
-
     fetchDoctor();
 
     // Real-time appointments
@@ -72,9 +79,19 @@ export default function DoctorDashboard() {
     );
   }
 
+  // Filter appointments
+  const filteredAppointments = appointments.filter((a) => {
+    const today = new Date();
+    const apptDate = new Date(a.date);
+    if (filter === "today") return apptDate.toDateString() === today.toDateString();
+    if (filter === "week")
+      return apptDate >= new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7);
+    return true;
+  });
+
   return (
     <Container className="mt-4">
-      {/* Profile Section */}
+      {/* Profile + Summary Section */}
       <Row className="mb-4">
         <Col md={4}>
           <Card className="shadow-sm border-0">
@@ -98,12 +115,14 @@ export default function DoctorDashboard() {
               </Card.Text>
               <Button variant="outline-primary" onClick={() => navigate("/messages")}>
                 <i className="bi bi-envelope-fill me-1"></i> View Messages
+              </Button>{" "}
+              <Button variant="outline-secondary" onClick={() => navigate("/edit-doctor")}>
+                <i className="bi bi-pencil-square me-1"></i> Edit Profile
               </Button>
             </Card.Body>
           </Card>
         </Col>
 
-        {/* Summary Cards */}
         <Col md={8}>
           <Row className="g-3">
             <Col sm={6}>
@@ -127,58 +146,70 @@ export default function DoctorDashboard() {
               </Card>
             </Col>
           </Row>
-
-          {/* Appointment History */}
-          <Card className="shadow-sm border-0 mt-4">
-            <Card.Header className="bg-primary text-white">
-              <i className="bi bi-clock-history me-2"></i> Appointment History
-            </Card.Header>
-            <Card.Body>
-              {appointments.length === 0 ? (
-                <p>No appointments found.</p>
-              ) : (
-                <div className="table-responsive">
-                  <table className="table align-middle">
-                    <thead>
-                      <tr>
-                        <th>Patient</th>
-                        <th>Date</th>
-                        <th>Time</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {appointments.map((a) => (
-                        <tr key={a.id}>
-                          <td>
-                            <i className="bi bi-person-fill me-2"></i>
-                            {a.patientName}
-                          </td>
-                          <td>{a.date}</td>
-                          <td>{a.time}</td>
-                          <td>
-                            <Badge
-                              bg={
-                                a.status === "confirmed"
-                                  ? "success"
-                                  : a.status === "pending"
-                                  ? "warning"
-                                  : "secondary"
-                              }
-                            >
-                              {a.status}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </Card.Body>
-          </Card>
         </Col>
       </Row>
+
+      {/* Appointment Management */}
+      <Card className="shadow-sm border-0 mt-4">
+        <Card.Header className="bg-primary text-white d-flex justify-content-between align-items-center">
+          <span>
+            <i className="bi bi-clock-history me-2"></i> Appointment History
+          </span>
+          <Form.Select
+            size="sm"
+            style={{ width: "180px" }}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            <option value="all">All Appointments</option>
+            <option value="today">Today</option>
+            <option value="week">This Week</option>
+          </Form.Select>
+        </Card.Header>
+        <Card.Body>
+          {filteredAppointments.length === 0 ? (
+            <p>No appointments found.</p>
+          ) : (
+            <div className="table-responsive">
+              <table className="table align-middle">
+                <thead>
+                  <tr>
+                    <th>Patient</th>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAppointments.map((a) => (
+                    <tr key={a.id}>
+                      <td>
+                        <i className="bi bi-person-fill me-2"></i>
+                        {a.patientName}
+                      </td>
+                      <td>{a.date}</td>
+                      <td>{a.time}</td>
+                      <td>
+                        <Badge
+                          bg={
+                            a.status === "confirmed"
+                              ? "success"
+                              : a.status === "pending"
+                              ? "warning"
+                              : "secondary"
+                          }
+                        >
+                          {a.status}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card.Body>
+      </Card>
 
       {/* Messages Section */}
       <Card className="shadow-sm border-0 mt-4">
@@ -190,20 +221,21 @@ export default function DoctorDashboard() {
             <p>No messages received yet.</p>
           ) : (
             <ul className="list-group">
-              {messages.map((msg) => (
-                <li key={msg.id} className="list-group-item">
-                  <i className="bi bi-person-fill text-primary me-2"></i>
-                  <strong>{msg.patientName || msg.from}</strong> — {msg.content || msg.text}
-                  <span
-                    className="text-muted float-end"
-                    style={{ fontSize: "0.85em" }}
-                  >
-                    {msg.createdAt?.toDate
-                      ? msg.createdAt.toDate().toLocaleString()
-                      : new Date(msg.createdAt).toLocaleString()}
-                  </span>
-                </li>
-              ))}
+              {messages
+                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                .map((msg) => (
+                  <li key={msg.id} className="list-group-item d-flex justify-content-between align-items-start">
+                    <div>
+                      <i className="bi bi-person-fill text-primary me-2"></i>
+                      <strong>{msg.patientName || msg.from}</strong>: {msg.content || msg.text}
+                    </div>
+                    <small className="text-muted">
+                      {msg.createdAt?.toDate
+                        ? msg.createdAt.toDate().toLocaleString()
+                        : new Date(msg.createdAt).toLocaleString()}
+                    </small>
+                  </li>
+                ))}
             </ul>
           )}
         </Card.Body>

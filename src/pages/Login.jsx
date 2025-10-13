@@ -1,23 +1,25 @@
 import React, { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { setAuthStart, setAuthSuccess, setAuthFailure } from '../features/authSlice';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 import { useNavigate, Link } from 'react-router-dom';
-
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
+  const [resetMessage, setResetMessage] = useState(null);
   const dispatch = useDispatch();
   const nav = useNavigate();
 
+  // 🔹 Handle Login
   const handle = async (e) => {
     e.preventDefault();
     dispatch(setAuthStart());
     setError(null);
+    setResetMessage(null);
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const user = {
@@ -34,12 +36,34 @@ export default function Login() {
     }
   };
 
+  // 🔹 Handle Forgot Password
+  const handleForgotPassword = async () => {
+    setError(null);
+    setResetMessage(null);
+
+    if (!email) {
+      setError('Please enter your email address to reset password.');
+      return;
+    }
+
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetMessage('Password reset email sent! Please check your inbox.');
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   return (
-    <div className="container d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
+    <div
+      className="container d-flex justify-content-center align-items-center"
+      style={{ minHeight: '100vh' }}
+    >
       <div className="card shadow-sm p-4" style={{ maxWidth: 400, width: '100%' }}>
         <h3 className="text-center mb-4">Login</h3>
 
         {error && <div className="alert alert-danger">{error}</div>}
+        {resetMessage && <div className="alert alert-success">{resetMessage}</div>}
 
         <form onSubmit={handle}>
           {/* Email */}
@@ -59,7 +83,7 @@ export default function Login() {
           </div>
 
           {/* Password */}
-          <div className="mb-3">
+          <div className="mb-2">
             <label className="form-label">Password</label>
             <div className="input-group">
               <span className="input-group-text"><i className="bi bi-lock-fill"></i></span>
@@ -79,6 +103,18 @@ export default function Login() {
                 <i className={showPassword ? "bi bi-eye-slash-fill" : "bi bi-eye-fill"}></i>
               </button>
             </div>
+          </div>
+
+          {/* Forgot Password */}
+          <div className="text-end mb-3">
+            <button
+              type="button"
+              className="btn btn-link p-0"
+              onClick={handleForgotPassword}
+              style={{ fontSize: '0.9em' }}
+            >
+              Forgot Password?
+            </button>
           </div>
 
           {/* Submit */}
