@@ -36,9 +36,7 @@ export default function Home() {
               <Link to="/register" className="btn btn-primary me-3">
                 <i className="bi bi-person-plus-fill me-1"></i> Get Started
               </Link>
-              <Link to="/doctors" className="btn btn-outline-primary">
-                <i className="bi bi-people-fill me-1"></i> Browse Doctors
-              </Link>
+              
             </div>
           </div>
         </div>
