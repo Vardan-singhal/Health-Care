@@ -1,245 +1,202 @@
-import React, { useEffect, useState } from "react";
-import { auth, db } from "../firebase";
-import {
-  doc,
-  getDoc,
-  collection,
-  query,
-  where,
-  onSnapshot,
-  orderBy,
-} from "firebase/firestore";
-import {
-  Container,
-  Row,
-  Col,
-  Card,
-  Button,
-  Spinner,
-  Badge,
-  Form,
-} from "react-bootstrap";
+// src/pages/DoctorDashboard.jsx
+import React, { useState, useEffect } from "react";
+import { Container, Row, Col, Card, Button, Table, Form, Badge, Tabs, Tab, ListGroup, InputGroup, FormControl } from "react-bootstrap";
+import { FaUserMd, FaCalendarCheck, FaEnvelope, FaClock, FaFileDownload } from "react-icons/fa";
+import { auth, db } from "../api/firebase";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
 export default function DoctorDashboard() {
-  const [doctor, setDoctor] = useState(null);
-  const [appointments, setAppointments] = useState([]);
-  const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all"); // appointment filter
-
   const navigate = useNavigate();
-  const user = auth.currentUser;
+  const [doctorProfile, setDoctorProfile] = useState(null);
+  const [upcomingAppointments, setUpcomingAppointments] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [key, setKey] = useState("appointments");
+  const [replyText, setReplyText] = useState({});
 
   useEffect(() => {
-    if (!user) return;
-
-    // Fetch doctor profile
-    const fetchDoctor = async () => {
+    const fetchDoctorData = async () => {
       try {
-        const docRef = doc(db, "doctors", user.uid);
+        const user = auth.currentUser;
+        if (!user) {
+          navigate("/login"); // redirect if not logged in
+          return;
+        }
+
+        // Fetch doctor profile
+        const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) setDoctor({ id: docSnap.id, ...docSnap.data() });
+        if (docSnap.exists() && docSnap.data().role === "doctor") {
+          setDoctorProfile(docSnap.data());
+        }
+
+        // Fetch appointments for this doctor
+        const apptQuery = query(collection(db, "appointments"), where("doctorId", "==", user.uid));
+        const apptSnap = await getDocs(apptQuery);
+        const appts = apptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setUpcomingAppointments(appts);
+
+        // Fetch messages for this doctor
+        const msgQuery = query(collection(db, "messages"), where("doctorId", "==", user.uid));
+        const msgSnap = await getDocs(msgQuery);
+        const msgs = msgSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setMessages(msgs);
       } catch (err) {
-        console.error("Error fetching doctor profile:", err);
+        console.error(err);
       }
     };
-    fetchDoctor();
 
-    // Real-time appointments
-    const apptQ = query(
-      collection(db, "appointments"),
-      where("doctorId", "==", user.uid),
-      orderBy("date", "desc")
-    );
-    const unsubscribeAppt = onSnapshot(apptQ, (snapshot) => {
-      const appts = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setAppointments(appts);
-      setLoading(false);
-    });
+    fetchDoctorData();
+  }, [navigate]);
 
-    // Real-time messages
-    const msgQ = query(collection(db, "messages"), where("doctorId", "==", user.uid));
-    const unsubscribeMsg = onSnapshot(msgQ, (snapshot) => {
-      const msgs = snapshot.docs.map((m) => ({ id: m.id, ...m.data() }));
-      setMessages(msgs);
-    });
+  // Button Handlers
+  const handleLogout = async () => {
+    await auth.signOut();
+    navigate("/"); // redirect to landing page
+  };
 
-    return () => {
-      unsubscribeAppt();
-      unsubscribeMsg();
-    };
-  }, [user]);
+  const handleEditProfile = () => alert("Edit Profile clicked!");
+  const handleAddAvailability = () => alert("Add Availability clicked!");
+  const handleSendMessage = () => alert("Send Message clicked!");
+  const handleDownloadReports = () => alert("Download Reports clicked!");
+  const handleConfirmAppointment = (id) => alert(`Confirm Appointment ${id}`);
+  const handleCancelAppointment = (id) => alert(`Cancel Appointment ${id}`);
+  const handleRescheduleAppointment = (id) => alert(`Reschedule Appointment ${id}`);
+  const handleSendReply = (msgId) => {
+    alert(`Reply to message ${msgId}: ${replyText[msgId]}`);
+    setReplyText(prev => ({ ...prev, [msgId]: "" }));
+  };
 
-  if (loading || !doctor) {
-    return (
-      <div className="d-flex justify-content-center align-items-center vh-100">
-        <Spinner animation="border" variant="primary" />
-      </div>
-    );
-  }
+  if (!doctorProfile) return <p>Loading doctor data...</p>;
 
-  // Filter appointments
-  const filteredAppointments = appointments.filter((a) => {
-    const today = new Date();
-    const apptDate = new Date(a.date);
-    if (filter === "today") return apptDate.toDateString() === today.toDateString();
-    if (filter === "week")
-      return apptDate >= new Date(today.getFullYear(), today.getMonth(), today.getDate() - 7);
-    return true;
-  });
+  // Summary Metrics (example placeholders)
+  const summaryMetrics = [
+    { title: "Total Appointments", value: upcomingAppointments.length, color: "primary", icon: <FaCalendarCheck /> },
+    { title: "Patients This Week", value: new Set(upcomingAppointments.map(a => a.patientName)).size, color: "success", icon: <FaUserMd /> },
+    { title: "Pending Appointments", value: upcomingAppointments.filter(a => a.status === "Pending").length, color: "warning", icon: <FaClock /> },
+    { title: "Messages Waiting", value: messages.filter(m => !m.read).length, color: "danger", icon: <FaEnvelope /> },
+  ];
 
   return (
-    <Container className="mt-4">
-      {/* Profile + Summary Section */}
-      <Row className="mb-4">
-        <Col md={4}>
-          <Card className="shadow-sm border-0">
-            <Card.Img
-              variant="top"
-              src={doctor.photoURL || "https://via.placeholder.com/200x200?text=Doctor"}
-              alt="Doctor"
-            />
+    <Container fluid className="my-4">
+      <Row>
+        {/* Left Column: Profile + Summary */}
+        <Col lg={3} className="mb-4">
+          <Card className="mb-4">
+            <Card.Img variant="top" src={doctorProfile.photo || "https://via.placeholder.com/150"} />
             <Card.Body>
-              <Card.Title className="d-flex align-items-center">
-                <i className="bi bi-person-badge me-2 text-primary"></i>
-                {doctor.name}
-              </Card.Title>
-              <Card.Subtitle className="text-muted mb-2">
-                {doctor.specialty || "General Practitioner"}
-              </Card.Subtitle>
+              <Card.Title>{doctorProfile.name}</Card.Title>
               <Card.Text>
-                <i className="bi bi-geo-alt-fill text-danger"></i> {doctor.city || "N/A"} <br />
-                <i className="bi bi-hospital text-success"></i> {doctor.hospital || "N/A"} <br />
-                <i className="bi bi-briefcase-fill text-warning"></i> {doctor.experience || "0"} years
+                <strong>Specialty:</strong> {doctorProfile.specialty} <br />
+                <strong>Hospital:</strong> {doctorProfile.hospital} <br />
+                <strong>City:</strong> {doctorProfile.city} <br />
+                <strong>Experience:</strong> {doctorProfile.experience} yrs <br />
+                <strong>Email:</strong> {doctorProfile.email} <br />
+                <strong>Phone:</strong> {doctorProfile.phone || "N/A"}
               </Card.Text>
-              <Button variant="outline-primary" onClick={() => navigate("/messages")}>
-                <i className="bi bi-envelope-fill me-1"></i> View Messages
-              </Button>{" "}
-              <Button variant="outline-secondary" onClick={() => navigate("/edit-doctor")}>
-                <i className="bi bi-pencil-square me-1"></i> Edit Profile
-              </Button>
+              <Button variant="outline-primary" className="w-100 mb-2" onClick={handleEditProfile}>Edit Profile</Button>
+              <Button variant="secondary" className="w-100" onClick={handleLogout}>Logout</Button>
+            </Card.Body>
+          </Card>
+
+          {/* Summary Cards */}
+          {summaryMetrics.map((metric, idx) => (
+            <Card key={idx} className="mb-3 border-left-0 shadow-sm">
+              <Card.Body className={`d-flex align-items-center text-${metric.color}`}>
+                <div style={{ fontSize: "1.5rem", marginRight: "0.5rem" }}>{metric.icon}</div>
+                <div>
+                  <div>{metric.title}</div>
+                  <div className="fw-bold">{metric.value}</div>
+                </div>
+              </Card.Body>
+            </Card>
+          ))}
+
+          {/* Quick Actions */}
+          <Card className="mb-3">
+            <Card.Body>
+              <Button variant="success" className="w-100 mb-2" onClick={handleAddAvailability}><FaClock className="me-2"/>Add Availability</Button>
+              <Button variant="info" className="w-100 mb-2" onClick={handleSendMessage}><FaEnvelope className="me-2"/>Send Message</Button>
+              <Button variant="dark" className="w-100" onClick={handleDownloadReports}><FaFileDownload className="me-2"/>Download Reports</Button>
             </Card.Body>
           </Card>
         </Col>
 
-        <Col md={8}>
-          <Row className="g-3">
-            <Col sm={6}>
-              <Card className="text-center shadow-sm border-0 p-3">
-                <i className="bi bi-calendar-check display-5 text-primary mb-2"></i>
-                <h5>Total Appointments</h5>
-                <h3>{appointments.length}</h3>
-              </Card>
-            </Col>
-            <Col sm={6}>
-              <Card className="text-center shadow-sm border-0 p-3">
-                <i className="bi bi-person-heart display-5 text-success mb-2"></i>
-                <h5>Patients This Week</h5>
-                <h3>
-                  {appointments.filter(
-                    (a) =>
-                      new Date(a.date).getTime() >
-                      new Date().getTime() - 7 * 24 * 60 * 60 * 1000
-                  ).length}
-                </h3>
-              </Card>
-            </Col>
-          </Row>
-        </Col>
-      </Row>
-
-      {/* Appointment Management */}
-      <Card className="shadow-sm border-0 mt-4">
-        <Card.Header className="bg-primary text-white d-flex justify-content-between align-items-center">
-          <span>
-            <i className="bi bi-clock-history me-2"></i> Appointment History
-          </span>
-          <Form.Select
-            size="sm"
-            style={{ width: "180px" }}
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-          >
-            <option value="all">All Appointments</option>
-            <option value="today">Today</option>
-            <option value="week">This Week</option>
-          </Form.Select>
-        </Card.Header>
-        <Card.Body>
-          {filteredAppointments.length === 0 ? (
-            <p>No appointments found.</p>
-          ) : (
-            <div className="table-responsive">
-              <table className="table align-middle">
+        {/* Right Column: Tabs */}
+        <Col lg={9}>
+          <Tabs activeKey={key} onSelect={(k) => setKey(k)} className="mb-3">
+            {/* Appointments Tab */}
+            <Tab eventKey="appointments" title="Appointments">
+              <h5>Upcoming Appointments</h5>
+              <Table striped bordered hover responsive>
                 <thead>
                   <tr>
-                    <th>Patient</th>
+                    <th>Patient Name</th>
                     <th>Date</th>
                     <th>Time</th>
                     <th>Status</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredAppointments.map((a) => (
-                    <tr key={a.id}>
+                  {upcomingAppointments.map((appt) => (
+                    <tr key={appt.id}>
+                      <td>{appt.patientName}</td>
+                      <td>{appt.date}</td>
+                      <td>{appt.time}</td>
                       <td>
-                        <i className="bi bi-person-fill me-2"></i>
-                        {a.patientName}
-                      </td>
-                      <td>{a.date}</td>
-                      <td>{a.time}</td>
-                      <td>
-                        <Badge
-                          bg={
-                            a.status === "confirmed"
-                              ? "success"
-                              : a.status === "pending"
-                              ? "warning"
-                              : "secondary"
-                          }
-                        >
-                          {a.status}
+                        <Badge bg={appt.status === "Confirmed" ? "success" : appt.status === "Pending" ? "warning" : "secondary"}>
+                          {appt.status}
                         </Badge>
+                      </td>
+                      <td>
+                        <Button size="sm" variant="success" className="me-1" onClick={() => handleConfirmAppointment(appt.id)}>Confirm</Button>
+                        <Button size="sm" variant="danger" className="me-1" onClick={() => handleCancelAppointment(appt.id)}>Cancel</Button>
+                        <Button size="sm" variant="outline-primary" onClick={() => handleRescheduleAppointment(appt.id)}>Reschedule</Button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
-            </div>
-          )}
-        </Card.Body>
-      </Card>
+              </Table>
+            </Tab>
 
-      {/* Messages Section */}
-      <Card className="shadow-sm border-0 mt-4">
-        <Card.Header className="bg-info text-white">
-          <i className="bi bi-chat-dots-fill me-2"></i> Messages from Patients
-        </Card.Header>
-        <Card.Body>
-          {messages.length === 0 ? (
-            <p>No messages received yet.</p>
-          ) : (
-            <ul className="list-group">
-              {messages
-                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                .map((msg) => (
-                  <li key={msg.id} className="list-group-item d-flex justify-content-between align-items-start">
-                    <div>
-                      <i className="bi bi-person-fill text-primary me-2"></i>
-                      <strong>{msg.patientName || msg.from}</strong>: {msg.content || msg.text}
+            {/* Messages Tab */}
+            <Tab eventKey="messages" title="Messages">
+              <h5>Patient Messages</h5>
+              <ListGroup>
+                {messages.map((msg) => (
+                  <ListGroup.Item key={msg.id} className={msg.read ? "" : "bg-light"}>
+                    <strong>{msg.patientName}</strong> - {msg.text} <br />
+                    <small className="text-muted">{msg.time}</small>
+                    <div className="mt-1">
+                      <InputGroup>
+                        <FormControl
+                          placeholder="Reply..."
+                          value={replyText[msg.id] || ""}
+                          onChange={(e) => setReplyText(prev => ({ ...prev, [msg.id]: e.target.value }))}
+                        />
+                        <Button variant="primary" onClick={() => handleSendReply(msg.id)}>Send</Button>
+                      </InputGroup>
                     </div>
-                    <small className="text-muted">
-                      {msg.createdAt?.toDate
-                        ? msg.createdAt.toDate().toLocaleString()
-                        : new Date(msg.createdAt).toLocaleString()}
-                    </small>
-                  </li>
+                  </ListGroup.Item>
                 ))}
-            </ul>
-          )}
-        </Card.Body>
-      </Card>
+              </ListGroup>
+            </Tab>
+
+            {/* Calendar Tab */}
+            <Tab eventKey="calendar" title="Calendar">
+              <h5>Schedule</h5>
+              <p>Calendar view placeholder - integrate FullCalendar or React Big Calendar here.</p>
+            </Tab>
+
+            {/* Reports Tab */}
+            <Tab eventKey="reports" title="Reports">
+              <h5>Analytics & Reports</h5>
+              <p>Patient demographics, appointment trends, performance metrics go here.</p>
+            </Tab>
+          </Tabs>
+        </Col>
+      </Row>
     </Container>
   );
 }

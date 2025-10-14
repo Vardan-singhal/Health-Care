@@ -1,219 +1,253 @@
-import React, { useState } from 'react';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { auth, db } from '../firebase';
-import { useNavigate, Link } from 'react-router-dom';
-import { collection, addDoc } from 'firebase/firestore';
+// src/pages/Register.jsx
+import React, { useState } from "react";
+import { Container, Form, Button, Card, InputGroup } from "react-bootstrap";
+import { 
+  FaLock, FaUser, FaHospital, FaCity, FaBriefcase, 
+  FaStethoscope, FaEnvelope, FaEyeSlash, FaEye, FaPhone 
+} from "react-icons/fa";
+import { useDispatch } from "react-redux";
+import { setUser } from "../redux/slices/authSlice";
+import { useNavigate } from "react-router-dom";
+import { auth, db } from "../api/firebase";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, setDoc } from "firebase/firestore";
 
 export default function Register() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState('patient');
-  const [hospital, setHospital] = useState('');
-  const [city, setCity] = useState('');
-  const [experience, setExperience] = useState('');
-  const [specialty, setSpecialty] = useState('');
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState(""); // Added phone state
+  const [role, setRole] = useState("patient");
+  const [specialty, setSpecialty] = useState("");
+  const [experience, setExperience] = useState("");
+  const [hospital, setHospital] = useState("");
+  const [city, setCity] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState(null);
-  const nav = useNavigate();
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handle = async (e) => {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+
+  const specialties = [
+    "Cardiologist", "Dermatologist", "Neurologist", "Pediatrics", "Gynecologist",
+    "Orthopedics", "Psychiatrist", "Radiologist", "ENT", "Ophthalmologist",
+    "Urologist", "Gastroenterologist", "Endocrinologist", "Nephrologist", "Oncologist"
+  ];
+
+  const handleRegister = async (e) => {
     e.preventDefault();
-    setError(null);
+    setLoading(true);
+    setError("");
 
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(cred.user, { displayName: name });
+      // Create user in Firebase Authentication
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
 
-      // Save basic user details
-      await addDoc(collection(db, 'users'), {
-        uid: cred.user.uid,
+      // Build user data (common for all)
+      const userData = {
+        uid: user.uid,
         name,
         email,
+        phone, // include phone
         role,
-        createdAt: new Date().toISOString(),
-      });
+        createdAt: new Date(),
+      };
 
-      // If doctor, save doctor-specific details
-      if (role === 'doctor') {
-        await addDoc(collection(db, 'doctors'), {
-          uid: cred.user.uid,
-          name,
-          email,
-          hospital: hospital || 'Not specified',
-          city: city || 'Not specified',
-          experience: experience || 0,
-          specialty: specialty || 'Not specified',
+      // Add extra info if doctor
+      if (role === "doctor") {
+        userData.specialty = specialty;
+        userData.experience = experience;
+        userData.hospital = hospital;
+        userData.city = city;
+      }
+
+      // Store in main unified collection
+      await setDoc(doc(db, "users", user.uid), userData);
+
+      // Store in role-specific collection as well
+      if (role === "doctor") {
+        await setDoc(doc(db, "doctors", user.uid), {
+          ...userData,
+          patients: [], // initialize empty list
+        });
+      } else if (role === "patient") {
+        await setDoc(doc(db, "patients", user.uid), {
+          ...userData,
+          medicalHistory: [],
+          appointments: [],
         });
       }
 
-      nav('/doctors');
+      // Update Redux state
+      dispatch(setUser({ user: { email: user.email, uid: user.uid }, role }));
+
+      // Redirect based on role
+      navigate(role === "patient" ? "/patient" : "/doctor");
+
     } catch (err) {
       setError(err.message);
-      console.error(err);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="container d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
-      <div className="card shadow-sm p-4" style={{ maxWidth: 420, width: '100%' }}>
-        <h3 className="text-center mb-4">Register</h3>
+    <Container fluid className="d-flex justify-content-center align-items-center" 
+      style={{ minHeight: "100vh", background: "#f8f9fa" }}>
+      <Card style={{ width: "100%", maxWidth: "500px" }} className="p-4 shadow-sm">
+        <h3 className="mb-4 text-center">Register</h3>
 
         {error && <div className="alert alert-danger">{error}</div>}
 
-        <form onSubmit={handle}>
+        <Form onSubmit={handleRegister}>
           {/* Name */}
-          <div className="mb-3">
-            <label className="form-label">Full Name</label>
-            <div className="input-group">
-              <span className="input-group-text"><i className="bi bi-person-fill"></i></span>
-              <input
+          <Form.Group className="mb-3">
+            <Form.Label>Full Name</Form.Label>
+            <InputGroup>
+              <InputGroup.Text><FaUser /></InputGroup.Text>
+              <Form.Control
                 type="text"
-                className="form-control"
-                placeholder="Enter your name"
+                placeholder="Enter your full name"
                 value={name}
-                onChange={e => setName(e.target.value)}
+                onChange={(e) => setName(e.target.value)}
                 required
               />
-            </div>
-          </div>
+            </InputGroup>
+          </Form.Group>
+
+          {/* Phone */}
+          <Form.Group className="mb-3">
+            <Form.Label>Phone Number</Form.Label>
+            <InputGroup>
+              <InputGroup.Text><FaPhone /></InputGroup.Text>
+              <Form.Control
+                type="tel"
+                placeholder="Enter your phone number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required
+              />
+            </InputGroup>
+          </Form.Group>
 
           {/* Email */}
-          <div className="mb-3">
-            <label className="form-label">Email</label>
-            <div className="input-group">
-              <span className="input-group-text"><i className="bi bi-envelope-fill"></i></span>
-              <input
+          <Form.Group className="mb-3">
+            <Form.Label>Email</Form.Label>
+            <InputGroup>
+              <InputGroup.Text><FaEnvelope /></InputGroup.Text>
+              <Form.Control
                 type="email"
-                className="form-control"
                 placeholder="Enter your email"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
-            </div>
-          </div>
+            </InputGroup>
+          </Form.Group>
 
           {/* Password */}
-          <div className="mb-3">
-            <label className="form-label">Password</label>
-            <div className="input-group">
-              <span className="input-group-text"><i className="bi bi-lock-fill"></i></span>
-              <input
+          <Form.Group className="mb-3">
+            <Form.Label>Password</Form.Label>
+            <InputGroup>
+              <InputGroup.Text><FaLock /></InputGroup.Text>
+              <Form.Control
                 type={showPassword ? "text" : "password"}
-                className="form-control"
-                placeholder="Enter password"
+                placeholder="Enter your password"
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 required
               />
-              <button
-                type="button"
-                className="btn btn-outline-secondary"
+              <Button
+                variant="outline-secondary"
                 onClick={() => setShowPassword(!showPassword)}
+                type="button"
               >
-                <i className={showPassword ? "bi bi-eye-slash-fill" : "bi bi-eye-fill"}></i>
-              </button>
-            </div>
-          </div>
+                {showPassword ? <FaEye /> : <FaEyeSlash />}
+              </Button>
+            </InputGroup>
+          </Form.Group>
 
           {/* Role */}
-          <div className="mb-3">
-            <label className="form-label">Role</label>
-            <select className="form-select" value={role} onChange={e => setRole(e.target.value)}>
+          <Form.Group className="mb-3">
+            <Form.Label>Role</Form.Label>
+            <Form.Select value={role} onChange={(e) => setRole(e.target.value)} required>
               <option value="patient">Patient</option>
               <option value="doctor">Doctor</option>
-            </select>
-          </div>
+            </Form.Select>
+          </Form.Group>
 
-          {/* Doctor Fields */}
-          {role === 'doctor' && (
+          {/* Doctor-specific fields */}
+          {role === "doctor" && (
             <>
-              {/* Specialty */}
-              <div className="mb-3">
-                <label className="form-label">Specialty</label>
-                <div className="input-group">
-                  <span className="input-group-text"><i className="bi bi-heart-pulse-fill"></i></span>
-                  <select
-                    className="form-select"
+              <Form.Group className="mb-3">
+                <Form.Label>Specialty</Form.Label>
+                <InputGroup>
+                  <InputGroup.Text><FaStethoscope /></InputGroup.Text>
+                  <Form.Select
                     value={specialty}
-                    onChange={e => setSpecialty(e.target.value)}
+                    onChange={(e) => setSpecialty(e.target.value)}
                     required
                   >
                     <option value="">Select Specialty</option>
-                    <option value="Cardiologist">Cardiologist</option>
-                    <option value="Dermatologist">Dermatologist</option>
-                    <option value="Neurologist">Neurologist</option>
-                    <option value="Orthopedics">Orthopedics</option>
-                    <option value="Pediatrics">Pediatrics</option>
-                    <option value="General Medicine">General Medicine</option>
-                    <option value="Psychiatrist">Psychiatrist</option>
-                    <option value="Gynecologist">Gynecologist</option>
-                    <option value="ENT">ENT</option>
-                    <option value="Dentist">Dentist</option>
-                  </select>
-                </div>
-              </div>
+                    {specialties.map((spec) => (
+                      <option key={spec} value={spec}>{spec}</option>
+                    ))}
+                  </Form.Select>
+                </InputGroup>
+              </Form.Group>
 
-              {/* Hospital */}
-              <div className="mb-3">
-                <label className="form-label">Hospital</label>
-                <div className="input-group">
-                  <span className="input-group-text"><i className="bi bi-building"></i></span>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Enter hospital name"
-                    value={hospital}
-                    onChange={e => setHospital(e.target.value)}
+              <Form.Group className="mb-3">
+                <Form.Label>Experience (years)</Form.Label>
+                <InputGroup>
+                  <InputGroup.Text><FaBriefcase /></InputGroup.Text>
+                  <Form.Control
+                    type="number"
+                    min="0"
+                    placeholder="Enter years of experience"
+                    value={experience}
+                    onChange={(e) => setExperience(e.target.value)}
+                    required
                   />
-                </div>
-              </div>
+                </InputGroup>
+              </Form.Group>
 
-              {/* City */}
-              <div className="mb-3">
-                <label className="form-label">City</label>
-                <div className="input-group">
-                  <span className="input-group-text"><i className="bi bi-geo-alt-fill"></i></span>
-                  <input
+              <Form.Group className="mb-3">
+                <Form.Label>Hospital / Clinic</Form.Label>
+                <InputGroup>
+                  <InputGroup.Text><FaHospital /></InputGroup.Text>
+                  <Form.Control
                     type="text"
-                    className="form-control"
+                    placeholder="Enter hospital or clinic name"
+                    value={hospital}
+                    onChange={(e) => setHospital(e.target.value)}
+                    required
+                  />
+                </InputGroup>
+              </Form.Group>
+
+              <Form.Group className="mb-3">
+                <Form.Label>City</Form.Label>
+                <InputGroup>
+                  <InputGroup.Text><FaCity /></InputGroup.Text>
+                  <Form.Control
+                    type="text"
                     placeholder="Enter city"
                     value={city}
-                    onChange={e => setCity(e.target.value)}
+                    onChange={(e) => setCity(e.target.value)}
+                    required
                   />
-                </div>
-              </div>
-
-              {/* Experience */}
-              <div className="mb-3">
-                <label className="form-label">Experience (in years)</label>
-                <div className="input-group">
-                  <span className="input-group-text"><i className="bi bi-briefcase-fill"></i></span>
-                  <input
-                    type="number"
-                    className="form-control"
-                    placeholder="Enter experience"
-                    value={experience}
-                    onChange={e => setExperience(e.target.value)}
-                    min="0"
-                  />
-                </div>
-              </div>
+                </InputGroup>
+              </Form.Group>
             </>
           )}
 
-          {/* Submit */}
-          <div className="d-grid mb-3">
-            <button type="submit" className="btn btn-primary">Register</button>
-          </div>
-
-          <div className="text-center">
-            <span>Already have an account? </span>
-            <Link to="/login">Login</Link>
-          </div>
-        </form>
-      </div>
-    </div>
+          <Button type="submit" className="w-100" disabled={loading}>
+            {loading ? "Registering..." : "Register"}
+          </Button>
+        </Form>
+      </Card>
+    </Container>
   );
 }

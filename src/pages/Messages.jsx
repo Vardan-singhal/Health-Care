@@ -1,195 +1,99 @@
-import React, { useEffect, useState, useRef } from "react";
-import { useSelector } from "react-redux";
-import { auth, db } from "../firebase";
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  addDoc,
-  onSnapshot,
-  serverTimestamp,
-} from "firebase/firestore";
-import { Container, Row, Col, Card, Form, Button } from "react-bootstrap";
+// src/pages/Messages.jsx
+import React, { useEffect, useState } from "react";
+import { Container, Card, ListGroup, InputGroup, FormControl, Button, Spinner } from "react-bootstrap";
+import { FaPaperPlane } from "react-icons/fa";
+import { db, auth } from "../api/firebase";
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, doc } from "firebase/firestore";
 
-export default function Messages() {
-  const { user } = useSelector((s) => s.auth);
+export default function Messages({ role }) {
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [chatPartner, setChatPartner] = useState(null);
-  const [threads, setThreads] = useState([]);
-  const messagesEndRef = useRef(null);
+  const [newMessage, setNewMessage] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  // 🔹 Listen for available chat threads
+  const currentUser = auth.currentUser;
+
   useEffect(() => {
-    if (!user) return;
+    if (!currentUser) return;
+
+    // Fetch messages where current user is sender or receiver
     const q = query(
       collection(db, "messages"),
-      where("participants", "array-contains", user.uid)
+      where("participants", "array-contains", currentUser.uid),
+      orderBy("timestamp", "asc")
     );
+
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allMsgs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      // Group by partner
-      const uniqueThreads = {};
-      allMsgs.forEach((msg) => {
-        const partnerId = msg.participants.find((p) => p !== user.uid);
-        if (!uniqueThreads[partnerId]) {
-          uniqueThreads[partnerId] = msg;
+      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setMessages(msgs);
+      setLoading(false);
+
+      // Mark unread messages as read if they are received by current user
+      msgs.forEach(async (msg) => {
+        if (!msg.read && msg.receiverId === currentUser.uid) {
+          await updateDoc(doc(db, "messages", msg.id), { read: true });
         }
       });
-      setThreads(Object.values(uniqueThreads));
     });
 
     return () => unsubscribe();
-  }, [user]);
+  }, [currentUser]);
 
-  // 🔹 Load messages for selected partner
-  useEffect(() => {
-    if (!chatPartner || !user) return;
+  const handleSend = async () => {
+    if (!newMessage.trim()) return;
 
-    const q = query(
-      collection(db, "messages"),
-      where("participants", "array-contains", user.uid),
-      orderBy("createdAt", "asc")
-    );
+    // For simplicity, sending message to all doctors/patients? Adjust receiverId logic as needed
+    // Here, you can extend UI to select receiver from a dropdown
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const allMsgs = snapshot.docs
-        .map((doc) => ({ id: doc.id, ...doc.data() }))
-        .filter(
-          (msg) =>
-            msg.participants.includes(chatPartner.uid) &&
-            msg.participants.includes(user.uid)
-        );
-      setMessages(allMsgs);
+    const receiverId = ""; // TODO: set correct receiverId dynamically
+    await addDoc(collection(db, "messages"), {
+      senderId: currentUser.uid,
+      receiverId,
+      participants: [currentUser.uid, receiverId],
+      text: newMessage,
+      timestamp: serverTimestamp(),
+      read: false,
     });
 
-    return () => unsubscribe();
-  }, [chatPartner, user]);
-
-  // 🔹 Auto-scroll on new message
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // 🔹 Send message
-  const handleSend = async (e) => {
-    e.preventDefault();
-    if (!input.trim() || !chatPartner) return;
-
-    try {
-      await addDoc(collection(db, "messages"), {
-        text: input,
-        from: user.uid,
-        to: chatPartner.uid,
-        participants: [user.uid, chatPartner.uid],
-        createdAt: serverTimestamp(),
-      });
-      setInput("");
-    } catch (error) {
-      console.error("Error sending message:", error);
-    }
+    setNewMessage("");
   };
 
   return (
-    <Container fluid className="py-4" style={{ marginTop: "80px" }}>
-      <Row>
-        {/* Left Sidebar - Threads */}
-        <Col md={3} className="border-end">
-          <h5 className="mb-3">Chats</h5>
-          {threads.length === 0 ? (
-            <p className="text-muted">No chats yet.</p>
-          ) : (
-            threads.map((t) => {
-              const partnerId = t.participants.find((p) => p !== user.uid);
-              return (
-                <Card
-                  key={partnerId}
-                  className={`mb-2 p-2 shadow-sm ${
-                    chatPartner?.uid === partnerId ? "bg-primary text-white" : ""
-                  }`}
-                  style={{ cursor: "pointer" }}
-                  onClick={() => setChatPartner({ uid: partnerId, name: t.partnerName || "User" })}
-                >
-                  <div className="d-flex align-items-center">
-                    <i className="bi bi-person-circle fs-4 me-2"></i>
-                    <div>
-                      <strong>{t.partnerName || "User"}</strong>
-                      <div className="small text-muted">
-                        {t.text?.slice(0, 25) || "Tap to chat"}
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })
-          )}
-        </Col>
+    <Container fluid className="my-4">
+      <h3 className="mb-3">Messages</h3>
 
-        {/* Right Chat Panel */}
-        <Col md={9}>
-          {chatPartner ? (
-            <Card className="shadow-sm">
-              <Card.Header className="d-flex align-items-center justify-content-between">
-                <div>
-                  <i className="bi bi-person-circle me-2"></i>
-                  <strong>{chatPartner.name}</strong>
-                </div>
-              </Card.Header>
-              <Card.Body
-                style={{ height: "65vh", overflowY: "auto", background: "#f8f9fa" }}
+      <Card className="p-3 mb-3" style={{ maxHeight: "70vh", overflowY: "auto" }}>
+        {loading ? (
+          <div className="d-flex justify-content-center align-items-center" style={{ height: "200px" }}>
+            <Spinner animation="border" />
+          </div>
+        ) : messages.length === 0 ? (
+          <p>No messages yet.</p>
+        ) : (
+          <ListGroup variant="flush">
+            {messages.map(msg => (
+              <ListGroup.Item
+                key={msg.id}
+                className={msg.senderId === currentUser.uid ? "text-end bg-light" : "text-start bg-white"}
               >
-                {messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`d-flex ${
-                      msg.from === user.uid ? "justify-content-end" : "justify-content-start"
-                    } mb-2`}
-                  >
-                    <div
-                      className={`p-2 rounded-3 ${
-                        msg.from === user.uid
-                          ? "bg-primary text-white"
-                          : "bg-light border"
-                      }`}
-                      style={{ maxWidth: "70%" }}
-                    >
-                      {msg.text}
-                      <div className="small text-muted mt-1">
-                        {msg.createdAt?.toDate
-                          ? msg.createdAt.toDate().toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : ""}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
-              </Card.Body>
-              <Card.Footer>
-                <Form onSubmit={handleSend} className="d-flex">
-                  <Form.Control
-                    type="text"
-                    placeholder="Type a message..."
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    className="me-2"
-                  />
-                  <Button variant="primary" type="submit">
-                    <i className="bi bi-send-fill"></i>
-                  </Button>
-                </Form>
-              </Card.Footer>
-            </Card>
-          ) : (
-            <div className="d-flex justify-content-center align-items-center h-100 text-muted">
-              <p>Select a chat to start messaging.</p>
-            </div>
-          )}
-        </Col>
-      </Row>
+                <strong>{msg.senderId === currentUser.uid ? "You" : "Sender"}</strong>: {msg.text}
+                <br />
+                <small className="text-muted">{msg.timestamp?.toDate().toLocaleString()}</small>
+              </ListGroup.Item>
+            ))}
+          </ListGroup>
+        )}
+      </Card>
+
+      <InputGroup>
+        <FormControl
+          placeholder="Type your message..."
+          value={newMessage}
+          onChange={(e) => setNewMessage(e.target.value)}
+        />
+        <Button onClick={handleSend}>
+          <FaPaperPlane />
+        </Button>
+      </InputGroup>
     </Container>
   );
 }

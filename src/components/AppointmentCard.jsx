@@ -1,18 +1,53 @@
-import React from 'react'
+// src/components/AppointmentCard.jsx
+import React from "react";
+import { Card, Button, Badge } from "react-bootstrap";
 
+export default function AppointmentCard({ appointment, role, onAction }) {
+  const { patientName, doctorName, date, time, status } = appointment;
 
-export default function AppointmentCard({ appt, onCancel }){
-return (
-<div className="card mb-2">
-<div className="card-body d-flex justify-content-between align-items-center">
-<div>
-<div className="fw-bold">{appt.doctorName || appt.doctorId}</div>
-<div className="text-muted small">{new Date(appt.time).toLocaleString()}</div>
-</div>
-<div>
-<button className="btn btn-danger btn-sm" onClick={() => onCancel(appt.id)}>Cancel</button>
-</div>
-</div>
-</div>
-)
+  const statusColor = {
+    Confirmed: "success",
+    Cancelled: "danger",
+    "Reschedule Requested": "warning",
+    Completed: "primary",
+  }[status] || "secondary";
+
+  return (
+    <Card className="mb-3 shadow-sm">
+      <Card.Body>
+        <Card.Title>
+          {role === "patient" ? doctorName : patientName}
+        </Card.Title>
+        <Card.Subtitle className="mb-2 text-muted">
+          {new Date(date.seconds * 1000).toLocaleDateString()} at {time}
+        </Card.Subtitle>
+        <Badge bg={statusColor}>{status}</Badge>
+
+        <div className="mt-3">
+          {role === "doctor" ? (
+            <>
+              <Button size="sm" variant="success" className="me-1" onClick={() => onAction(appointment.id, "confirm")}>
+                Confirm
+              </Button>
+              <Button size="sm" variant="danger" className="me-1" onClick={() => onAction(appointment.id, "cancel")}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="primary" onClick={() => onAction(appointment.id, "complete")}>
+                Complete
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button size="sm" variant="danger" className="me-1" onClick={() => onAction(appointment.id, "cancel")}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="warning" onClick={() => onAction(appointment.id, "reschedule")}>
+                Reschedule
+              </Button>
+            </>
+          )}
+        </div>
+      </Card.Body>
+    </Card>
+  );
 }
