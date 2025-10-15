@@ -195,10 +195,10 @@ export default function PatientDashboard() {
               <br />
               <strong>Allergies:</strong> None
             </Card.Text>
-            <Button variant="primary" className="me-2">
+            <Button variant="primary" className="me-2 my-2 rounded-pill">
               <FaFileDownload /> Download Report
             </Button>
-            <Button variant="secondary">View Full History</Button>
+            <Button variant="secondary" className="me-2 my-2 rounded-pill">View Full History</Button>
           </Card>
         </Col>
 
@@ -208,30 +208,20 @@ export default function PatientDashboard() {
             <Card.Title>
               <FaCalendarAlt className="me-2" /> Appointments
             </Card.Title>
-            {loadingAppointments ? (
-              <Spinner animation="border" />
-            ) : appointments.length ? (
-              <Card.Text>
-                <strong>Next:</strong>{" "}
-                {appointments[0].doctorName} –{" "}
-                {toJSDate(appointments[0].date)?.toDateString()}{" "}
-                {appointments[0].time}
-                <br />
-                <strong>Past:</strong>{" "}
-                {appointments.length > 1
-                  ? `${appointments[1].doctorName} – ${toJSDate(
-                      appointments[1].date
-                    )?.toDateString()}`
-                  : "No past appointments"}
-              </Card.Text>
-            ) : (
-              <Card.Text>No appointments yet.</Card.Text>
-            )}
+            <Card.Text>
+              <strong>Next:</strong>{" "}
+              {appointments.length
+                ? `${toJSDate(appointments[0].date).toLocaleDateString()} at ${appointments[0].time} with Dr. ${appointments[0].doctorName}`
+                : "No upcoming appointments"}
+              <br />
+              <strong>Total:</strong> {appointments.length} appointments
+            </Card.Text>
+            
             <Button
               as={Link}
               to="/patient/appointments/manage"
               variant="success"
-              className="me-2"
+              className="me-2 my-2 rounded-pill"
             >
               Book Appointment
             </Button>
@@ -239,10 +229,10 @@ export default function PatientDashboard() {
             as={Link}
             to="/patient/appointments/manage"
             variant="warning" 
-            className="me-2" >
+            className="me-2 my-2 rounded-pill" >
               Cancel / Reschedule
             </Button>
-            <Button variant="secondary">View Prescription</Button>
+            
           </Card>
         </Col>
 
@@ -257,13 +247,13 @@ export default function PatientDashboard() {
               <br />
               <strong>Past:</strong> Metformin 500mg - Completed
             </Card.Text>
-            <Button variant="primary" className="me-2">
+            <Button variant="primary" className="me-2 my-2 rounded-pill">
               Request Refill
             </Button>
-            <Button variant="secondary" className="me-2">
+            <Button variant="secondary" className="me-2 my-2 rounded-pill">
               <FaFileDownload /> Download Prescription
             </Button>
-            <Button variant="warning">Set Reminder</Button>
+            <Button variant="warning" className="me-2 my-2 rounded-pill">Set Reminder</Button>
           </Card>
         </Col>
       </Row>
