@@ -82,7 +82,7 @@ export default function AppNavbar({ role, page }) {
 
       <Nav.Link as={Link} to="/patient/messages" className="me-2 d-flex align-items-center">
         <FaEnvelope className="me-1" />
-        Messages <Badge bg="danger" className="ms-1">2</Badge>
+        Messages 
       </Nav.Link>
 
       <Dropdown className="me-2">
