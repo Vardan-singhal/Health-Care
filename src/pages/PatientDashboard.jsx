@@ -1,3 +1,4 @@
+// src/pages/PatientDashboard.jsx
 import React, { useState, useEffect } from "react";
 import {
   Container,
@@ -13,6 +14,7 @@ import {
   Badge,
   Modal,
   Spinner,
+  FormControl,
 } from "react-bootstrap";
 import {
   FaSearch,
@@ -32,8 +34,10 @@ import { useSelector } from "react-redux";
 
 export default function PatientDashboard() {
   const { user } = useSelector((state) => state.auth);
+
   const [search, setSearch] = useState("");
   const [doctors, setDoctors] = useState([]);
+  const [filteredDoctors, setFilteredDoctors] = useState([]);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
@@ -49,6 +53,19 @@ export default function PatientDashboard() {
     if (date instanceof Date) return date;
     return new Date(date);
   };
+  const [patientName, setPatientName] = useState("");
+
+  useEffect(() => {
+    const fetchPatientName = async () => {
+      if (!user) return;
+      const docRef = doc(db, "users", user.uid); // assuming patient data is in 'users' collection
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        setPatientName(docSnap.data().name); // adjust if you stored it as 'fullName' or something else
+      }
+    };
+    fetchPatientName();
+  }, [user]);
 
   // Fetch all doctors
   useEffect(() => {
@@ -58,12 +75,25 @@ export default function PatientDashboard() {
         const snap = await getDocs(q);
         const doctorList = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         setDoctors(doctorList);
+        setFilteredDoctors(doctorList);
       } catch (err) {
         console.error("Error fetching doctors:", err);
       }
     };
     fetchDoctors();
   }, []);
+
+  // Filter doctors based on search input
+  useEffect(() => {
+    const queryStr = search.toLowerCase();
+    const filtered = doctors.filter((doc) =>
+      (doc.name && doc.name.toLowerCase().includes(queryStr)) ||
+      (doc.specialty && doc.specialty.toLowerCase().includes(queryStr)) ||
+      (doc.hospital && doc.hospital.toLowerCase().includes(queryStr)) ||
+      (doc.city && doc.city.toLowerCase().includes(queryStr))
+    );
+    setFilteredDoctors(filtered);
+  }, [search, doctors]);
 
   // Fetch appointments
   useEffect(() => {
@@ -144,40 +174,17 @@ export default function PatientDashboard() {
     }
   };
 
-  const filteredDoctors = doctors.filter(
-    (doc) =>
-      doc.name?.toLowerCase().includes(search.toLowerCase()) ||
-      doc.specialty?.toLowerCase().includes(search.toLowerCase()) ||
-      doc.hospital?.toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
     <Container fluid className="p-3">
       {/* Header */}
       <Row className="align-items-center mb-4">
-        <Col md={4}>
-          <h2>Welcome Back!</h2>
+        <Col >
+          <h2 className="text-center">
+  Welcome Back{patientName ? `, ${patientName}` : ""}!
+</h2>
         </Col>
-        <Col md={4}>
-          <InputGroup>
-            <Form.Control
-              placeholder="Search doctors, prescriptions..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <InputGroup.Text>
-              <FaSearch />
-            </InputGroup.Text>
-          </InputGroup>
-        </Col>
-        <Col md={4} className="text-end">
-          <Button variant="light" className="me-2">
-            <FaBell />
-          </Button>
-          <Button variant="light">
-            <FaUser />
-          </Button>
-        </Col>
+        
+        
       </Row>
 
       {/* Main Sections */}
@@ -216,7 +223,7 @@ export default function PatientDashboard() {
               <br />
               <strong>Total:</strong> {appointments.length} appointments
             </Card.Text>
-            
+
             <Button
               as={Link}
               to="/patient/appointments/manage"
@@ -225,14 +232,14 @@ export default function PatientDashboard() {
             >
               Book Appointment
             </Button>
-            <Button 
-            as={Link}
-            to="/patient/appointments/manage"
-            variant="warning" 
-            className="me-2 my-2 rounded-pill" >
+            <Button
+              as={Link}
+              to="/patient/appointments/manage"
+              variant="warning"
+              className="me-2 my-2 rounded-pill"
+            >
               Cancel / Reschedule
             </Button>
-            
           </Card>
         </Col>
 
@@ -399,6 +406,18 @@ export default function PatientDashboard() {
 
       {/* Find a Doctor */}
       <h2 className="mb-4 mt-5">Find a Doctor</h2>
+      <Col md={4}>
+          <InputGroup className="my-3">
+            <FormControl
+              placeholder="Search doctors by name, city, hospital, specialty..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <InputGroup.Text>
+              <FaSearch />
+            </InputGroup.Text>
+          </InputGroup>
+        </Col>
       <Row>
         {filteredDoctors.map((doc) => (
           <Col md={4} key={doc.id} className="mb-3">
@@ -416,8 +435,7 @@ export default function PatientDashboard() {
           {selectedDoctor ? (
             <>
               <p>
-                Booking appointment with{" "}
-                <strong>{selectedDoctor.name}</strong> ({selectedDoctor.specialty})
+                Booking appointment with <strong>{selectedDoctor.name}</strong> ({selectedDoctor.specialty})
               </p>
               <Form onSubmit={handleConfirmBooking}>
                 <Form.Group className="mb-3">
