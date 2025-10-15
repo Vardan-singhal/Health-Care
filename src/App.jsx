@@ -11,6 +11,8 @@ import DoctorDashboard from "./pages/DoctorDashboard";
 import AppLayout from "./layouts/applayout";
 import ManageAppointments from "./pages/ManageAppointments"; // ✅ added import
 import PatientMessages from "./pages/PatientMessages";
+import Prescriptions from "./pages/Prescriptions";
+import DoctorMessages from "./pages/DoctorMessages";
 
 // PrivateRoute for protecting dashboard routes
 function PrivateRoute({ children, role }) {
@@ -86,6 +88,9 @@ function App() {
         {/* Catch-all redirect */}
         <Route path="*" element={<Navigate to="/" />} />
         <Route path="/patient/messages" element={<PatientMessages />} />
+        <Route path="/patient/records/prescriptions" element={<Prescriptions />} />
+        <Route path="/doctor/messages" element={<DoctorMessages />} />  
+
       </Routes>
     </Router>
   );
