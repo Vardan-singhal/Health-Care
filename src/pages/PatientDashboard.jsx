@@ -29,7 +29,17 @@ import {
 import { Link } from "react-router-dom";
 import DoctorCard from "../components/DoctorCard";
 import { db } from "../api/firebase";
-import { collection, query, where, getDocs, addDoc, orderBy } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  orderBy,
+  doc,
+  getDoc,
+  onSnapshot,
+} from "firebase/firestore";
 import { useSelector } from "react-redux";
 
 export default function PatientDashboard() {
@@ -45,23 +55,24 @@ export default function PatientDashboard() {
   const [messages, setMessages] = useState([]);
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(true);
+  const [patientName, setPatientName] = useState("");
 
-  // ✅ Convert Firestore Timestamp safely to JS Date
+  // ✅ Safely convert Firestore Timestamp to JS Date
   const toJSDate = (date) => {
     if (!date) return null;
     if (date.seconds) return new Date(date.seconds * 1000);
     if (date instanceof Date) return date;
     return new Date(date);
   };
-  const [patientName, setPatientName] = useState("");
 
+  // Fetch patient name
   useEffect(() => {
     const fetchPatientName = async () => {
       if (!user) return;
-      const docRef = doc(db, "users", user.uid); // assuming patient data is in 'users' collection
+      const docRef = doc(db, "users", user.uid);
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
-        setPatientName(docSnap.data().name); // adjust if you stored it as 'fullName' or something else
+        setPatientName(docSnap.data().name || "");
       }
     };
     fetchPatientName();
@@ -83,39 +94,49 @@ export default function PatientDashboard() {
     fetchDoctors();
   }, []);
 
-  // Filter doctors based on search input
+  // Filter doctors based on search
   useEffect(() => {
     const queryStr = search.toLowerCase();
-    const filtered = doctors.filter((doc) =>
-      (doc.name && doc.name.toLowerCase().includes(queryStr)) ||
-      (doc.specialty && doc.specialty.toLowerCase().includes(queryStr)) ||
-      (doc.hospital && doc.hospital.toLowerCase().includes(queryStr)) ||
-      (doc.city && doc.city.toLowerCase().includes(queryStr))
+    const filtered = doctors.filter(
+      (doc) =>
+        (doc.name && doc.name.toLowerCase().includes(queryStr)) ||
+        (doc.specialty && doc.specialty.toLowerCase().includes(queryStr)) ||
+        (doc.hospital && doc.hospital.toLowerCase().includes(queryStr)) ||
+        (doc.city && doc.city.toLowerCase().includes(queryStr))
     );
     setFilteredDoctors(filtered);
   }, [search, doctors]);
 
-  // Fetch appointments
+  // ✅ Real-time Fetch of Approved Appointments
   useEffect(() => {
-    const fetchAppointments = async () => {
-      setLoadingAppointments(true);
-      try {
-        const q = query(
-          collection(db, "appointments"),
-          where("patientId", "==", user.uid),
-          orderBy("date", "asc")
-        );
-        const snap = await getDocs(q);
-        const apptList = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-        setAppointments(apptList);
-      } catch (err) {
-        console.error("Error fetching appointments:", err);
-      } finally {
+    if (!user?.uid) return;
+    setLoadingAppointments(true);
+
+    const q = query(
+      collection(db, "appointments"),
+      where("patientId", "==", user.uid),
+      where("status", "==", "Approved"),
+      orderBy("date", "asc")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const approvedList = snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setAppointments(approvedList);
+        setLoadingAppointments(false);
+      },
+      (error) => {
+        console.error("Error fetching appointments:", error);
         setLoadingAppointments(false);
       }
-    };
-    fetchAppointments();
-  }, [user.uid]);
+    );
+
+    return () => unsubscribe();
+  }, [user]);
 
   // Fetch messages
   useEffect(() => {
@@ -139,7 +160,7 @@ export default function PatientDashboard() {
     fetchMessages();
   }, [user.uid]);
 
-  // Open book appointment modal
+  // Book appointment modal
   const handleBookAppointment = (doctor = null) => {
     setSelectedDoctor(doctor);
     setShowModal(true);
@@ -178,13 +199,11 @@ export default function PatientDashboard() {
     <Container fluid className="p-3">
       {/* Header */}
       <Row className="align-items-center mb-4">
-        <Col >
+        <Col>
           <h2 className="text-center">
-  Welcome Back{patientName ? `, ${patientName}` : ""}!
-</h2>
+            Welcome Back{patientName ? `, ${patientName}` : ""}!
+          </h2>
         </Col>
-        
-        
       </Row>
 
       {/* Main Sections */}
@@ -205,24 +224,34 @@ export default function PatientDashboard() {
             <Button variant="primary" className="me-2 my-2 rounded-pill">
               <FaFileDownload /> Download Report
             </Button>
-            <Button variant="secondary" className="me-2 my-2 rounded-pill">View Full History</Button>
+            <Button variant="secondary" className="me-2 my-2 rounded-pill">
+              View Full History
+            </Button>
           </Card>
         </Col>
 
-        {/* Appointments */}
+        {/* ✅ Updated Appointments Card */}
         <Col lg={4} md={6} className="mb-3">
           <Card className="p-3 h-100">
             <Card.Title>
               <FaCalendarAlt className="me-2" /> Appointments
             </Card.Title>
-            <Card.Text>
-              <strong>Next:</strong>{" "}
-              {appointments.length
-                ? `${toJSDate(appointments[0].date).toLocaleDateString()} at ${appointments[0].time} with Dr. ${appointments[0].doctorName}`
-                : "No upcoming appointments"}
-              <br />
-              <strong>Total:</strong> {appointments.length} appointments
-            </Card.Text>
+            {loadingAppointments ? (
+              <Spinner animation="border" />
+            ) : (
+              <Card.Text>
+                <strong>Next:</strong>{" "}
+                {appointments.length > 0 ? (
+                  `${toJSDate(appointments[0].date).toLocaleDateString()} at ${
+                    appointments[0].time
+                  }`
+                ) : (
+                  "No approved upcoming appointments"
+                )}
+                <br />
+                <strong>Total Approved:</strong> {appointments.length} appointments
+              </Card.Text>
+            )}
 
             <Button
               as={Link}
@@ -250,21 +279,22 @@ export default function PatientDashboard() {
               <FaPrescriptionBottle className="me-2" /> Medications
             </Card.Title>
             <Card.Text>
-              <strong>Current:</strong> Aspirin 75mg - 1x/day
-              <br />
-              <strong>Past:</strong> Metformin 500mg - Completed
+              You will find your Prescription issued by doctors here.
             </Card.Text>
-            <Button variant="primary" className="me-2 my-2 rounded-pill">
-              Request Refill
-            </Button>
-            <Button variant="secondary" className="me-2 my-2 rounded-pill">
+            <Button
+              variant="secondary"
+              className="me-2 my-2 rounded-pill"
+              as={Link}
+              to="/patient/records/prescriptions"
+            >
               <FaFileDownload /> Download Prescription
             </Button>
-            <Button variant="warning" className="me-2 my-2 rounded-pill">Set Reminder</Button>
+            <Button variant="warning" className="me-2 my-2 rounded-pill">
+              Set Reminder
+            </Button>
           </Card>
         </Col>
       </Row>
-
       {/* Tabs Section */}
       <Tab.Container defaultActiveKey="messages">
         <Nav variant="tabs" className="mb-3">
