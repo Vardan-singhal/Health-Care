@@ -14,6 +14,13 @@ export default function DoctorDashboard() {
   const [key, setKey] = useState("appointments");
   const [replyText, setReplyText] = useState({});
 
+  // Helper to convert Firestore Timestamp to string
+  const convertTimestamp = (ts) => {
+    if (!ts) return "";
+    if (ts.toDate) return ts.toDate().toLocaleString();
+    return ts;
+  };
+
   useEffect(() => {
     const fetchDoctorData = async () => {
       try {
@@ -33,13 +40,28 @@ export default function DoctorDashboard() {
         // Fetch appointments for this doctor
         const apptQuery = query(collection(db, "appointments"), where("doctorId", "==", user.uid));
         const apptSnap = await getDocs(apptQuery);
-        const appts = apptSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const appts = apptSnap.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            date: data.date?.toDate?.(),  // convert Firestore Timestamp to JS Date
+            time: data.time?.toDate?.() || data.time, // convert time if timestamp
+          };
+        });
         setUpcomingAppointments(appts);
 
         // Fetch messages for this doctor
         const msgQuery = query(collection(db, "messages"), where("doctorId", "==", user.uid));
         const msgSnap = await getDocs(msgQuery);
-        const msgs = msgSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const msgs = msgSnap.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            time: data.time?.toDate?.(),
+          };
+        });
         setMessages(msgs);
       } catch (err) {
         console.error(err);
@@ -69,7 +91,7 @@ export default function DoctorDashboard() {
 
   if (!doctorProfile) return <p>Loading doctor data...</p>;
 
-  // Summary Metrics (example placeholders)
+  // Summary Metrics
   const summaryMetrics = [
     { title: "Total Appointments", value: upcomingAppointments.length, color: "primary", icon: <FaCalendarCheck /> },
     { title: "Patients This Week", value: new Set(upcomingAppointments.map(a => a.patientName)).size, color: "success", icon: <FaUserMd /> },
@@ -142,8 +164,8 @@ export default function DoctorDashboard() {
                   {upcomingAppointments.map((appt) => (
                     <tr key={appt.id}>
                       <td>{appt.patientName}</td>
-                      <td>{appt.date}</td>
-                      <td>{appt.time}</td>
+                      <td>{appt.date?.toLocaleDateString()}</td>
+                      <td>{appt.date?.toLocaleTimeString()}</td>
                       <td>
                         <Badge bg={appt.status === "Confirmed" ? "success" : appt.status === "Pending" ? "warning" : "secondary"}>
                           {appt.status}
@@ -167,7 +189,7 @@ export default function DoctorDashboard() {
                 {messages.map((msg) => (
                   <ListGroup.Item key={msg.id} className={msg.read ? "" : "bg-light"}>
                     <strong>{msg.patientName}</strong> - {msg.text} <br />
-                    <small className="text-muted">{msg.time}</small>
+                    <small className="text-muted">{msg.time?.toLocaleString()}</small>
                     <div className="mt-1">
                       <InputGroup>
                         <FormControl

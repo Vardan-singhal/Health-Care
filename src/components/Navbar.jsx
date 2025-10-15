@@ -71,7 +71,7 @@ export default function AppNavbar({ role, page }) {
           <FaCalendarAlt className="me-1" /> Appointments
         </Dropdown.Toggle>
         <Dropdown.Menu>
-          <Dropdown.Item as={Link} to="/patient/appointments/book">
+          <Dropdown.Item as={Link} to="/patient/appointments/manage">
             Book Appointment
           </Dropdown.Item>
           <Dropdown.Item as={Link} to="/patient/appointments/manage">

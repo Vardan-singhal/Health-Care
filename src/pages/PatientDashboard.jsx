@@ -1,14 +1,37 @@
-// src/pages/PatientDashboard.jsx
 import React, { useState, useEffect } from "react";
-import { Container, Row, Col, Card, Button, Form, InputGroup, Nav, Tab, Table, Badge, Modal, Spinner } from "react-bootstrap";
-import { FaSearch, FaBell, FaUser, FaFileDownload, FaPrescriptionBottle, FaEnvelope, FaCalendarAlt, FaHeartbeat } from "react-icons/fa";
+import {
+  Container,
+  Row,
+  Col,
+  Card,
+  Button,
+  Form,
+  InputGroup,
+  Nav,
+  Tab,
+  Table,
+  Badge,
+  Modal,
+  Spinner,
+} from "react-bootstrap";
+import {
+  FaSearch,
+  FaBell,
+  FaUser,
+  FaFileDownload,
+  FaPrescriptionBottle,
+  FaEnvelope,
+  FaCalendarAlt,
+  FaHeartbeat,
+} from "react-icons/fa";
+import { Link } from "react-router-dom";
 import DoctorCard from "../components/DoctorCard";
 import { db } from "../api/firebase";
 import { collection, query, where, getDocs, addDoc, orderBy } from "firebase/firestore";
 import { useSelector } from "react-redux";
 
 export default function PatientDashboard() {
-  const { user } = useSelector(state => state.auth);
+  const { user } = useSelector((state) => state.auth);
   const [search, setSearch] = useState("");
   const [doctors, setDoctors] = useState([]);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
@@ -19,13 +42,21 @@ export default function PatientDashboard() {
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(true);
 
+  // ✅ Convert Firestore Timestamp safely to JS Date
+  const toJSDate = (date) => {
+    if (!date) return null;
+    if (date.seconds) return new Date(date.seconds * 1000);
+    if (date instanceof Date) return date;
+    return new Date(date);
+  };
+
   // Fetch all doctors
   useEffect(() => {
     const fetchDoctors = async () => {
       try {
         const q = query(collection(db, "users"), where("role", "==", "doctor"));
         const snap = await getDocs(q);
-        const doctorList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const doctorList = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         setDoctors(doctorList);
       } catch (err) {
         console.error("Error fetching doctors:", err);
@@ -45,7 +76,7 @@ export default function PatientDashboard() {
           orderBy("date", "asc")
         );
         const snap = await getDocs(q);
-        const apptList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const apptList = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         setAppointments(apptList);
       } catch (err) {
         console.error("Error fetching appointments:", err);
@@ -67,7 +98,7 @@ export default function PatientDashboard() {
           orderBy("time", "desc")
         );
         const snap = await getDocs(q);
-        const msgList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const msgList = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
         setMessages(msgList);
       } catch (err) {
         console.error("Error fetching messages:", err);
@@ -98,9 +129,12 @@ export default function PatientDashboard() {
         doctorId: selectedDoctor.id,
         doctorName: selectedDoctor.name,
         date: new Date(dateTime),
-        time: new Date(dateTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: new Date(dateTime).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
         status: "Booked",
-        createdAt: new Date()
+        createdAt: new Date(),
       });
       alert("Appointment booked successfully!");
       setShowModal(false);
@@ -110,17 +144,20 @@ export default function PatientDashboard() {
     }
   };
 
-  const filteredDoctors = doctors.filter(doc =>
-    doc.name.toLowerCase().includes(search.toLowerCase()) ||
-    doc.specialty.toLowerCase().includes(search.toLowerCase()) ||
-    doc.hospital.toLowerCase().includes(search.toLowerCase())
+  const filteredDoctors = doctors.filter(
+    (doc) =>
+      doc.name?.toLowerCase().includes(search.toLowerCase()) ||
+      doc.specialty?.toLowerCase().includes(search.toLowerCase()) ||
+      doc.hospital?.toLowerCase().includes(search.toLowerCase())
   );
 
   return (
     <Container fluid className="p-3">
       {/* Header */}
       <Row className="align-items-center mb-4">
-        <Col md={4}><h2>Welcome Back!</h2></Col>
+        <Col md={4}>
+          <h2>Welcome Back!</h2>
+        </Col>
         <Col md={4}>
           <InputGroup>
             <Form.Control
@@ -128,12 +165,18 @@ export default function PatientDashboard() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <InputGroup.Text><FaSearch /></InputGroup.Text>
+            <InputGroup.Text>
+              <FaSearch />
+            </InputGroup.Text>
           </InputGroup>
         </Col>
         <Col md={4} className="text-end">
-          <Button variant="light" className="me-2"><FaBell /></Button>
-          <Button variant="light"><FaUser /></Button>
+          <Button variant="light" className="me-2">
+            <FaBell />
+          </Button>
+          <Button variant="light">
+            <FaUser />
+          </Button>
         </Col>
       </Row>
 
@@ -142,13 +185,19 @@ export default function PatientDashboard() {
         {/* Medical Summary */}
         <Col lg={4} md={6} className="mb-3">
           <Card className="p-3 h-100">
-            <Card.Title><FaHeartbeat className="me-2" /> Medical Summary</Card.Title>
+            <Card.Title>
+              <FaHeartbeat className="me-2" /> Medical Summary
+            </Card.Title>
             <Card.Text>
-              <strong>Vitals:</strong> BP: 120/80, Sugar: 90 mg/dL, Heart Rate: 72 bpm<br />
-              <strong>Recent Lab:</strong> Blood Test - Normal<br />
+              <strong>Vitals:</strong> BP: 120/80, Sugar: 90 mg/dL, Heart Rate: 72 bpm
+              <br />
+              <strong>Recent Lab:</strong> Blood Test - Normal
+              <br />
               <strong>Allergies:</strong> None
             </Card.Text>
-            <Button variant="primary" className="me-2"><FaFileDownload /> Download Report</Button>
+            <Button variant="primary" className="me-2">
+              <FaFileDownload /> Download Report
+            </Button>
             <Button variant="secondary">View Full History</Button>
           </Card>
         </Col>
@@ -156,19 +205,43 @@ export default function PatientDashboard() {
         {/* Appointments */}
         <Col lg={4} md={6} className="mb-3">
           <Card className="p-3 h-100">
-            <Card.Title><FaCalendarAlt className="me-2" /> Appointments</Card.Title>
+            <Card.Title>
+              <FaCalendarAlt className="me-2" /> Appointments
+            </Card.Title>
             {loadingAppointments ? (
               <Spinner animation="border" />
             ) : appointments.length ? (
               <Card.Text>
-                <strong>Next:</strong> {appointments[0].doctorName} - {appointments[0].date.toDateString()} {appointments[0].time}<br />
-                <strong>Past:</strong> {appointments.length > 1 ? appointments[1].doctorName + " - " + appointments[1].date.toDateString() : "No past appointments"}
+                <strong>Next:</strong>{" "}
+                {appointments[0].doctorName} –{" "}
+                {toJSDate(appointments[0].date)?.toDateString()}{" "}
+                {appointments[0].time}
+                <br />
+                <strong>Past:</strong>{" "}
+                {appointments.length > 1
+                  ? `${appointments[1].doctorName} – ${toJSDate(
+                      appointments[1].date
+                    )?.toDateString()}`
+                  : "No past appointments"}
               </Card.Text>
             ) : (
               <Card.Text>No appointments yet.</Card.Text>
             )}
-            <Button variant="success" className="me-2" onClick={() => handleBookAppointment()}>Book Appointment</Button>
-            <Button variant="warning" className="me-2">Cancel / Reschedule</Button>
+            <Button
+              as={Link}
+              to="/patient/appointments/manage"
+              variant="success"
+              className="me-2"
+            >
+              Book Appointment
+            </Button>
+            <Button 
+            as={Link}
+            to="/patient/appointments/manage"
+            variant="warning" 
+            className="me-2" >
+              Cancel / Reschedule
+            </Button>
             <Button variant="secondary">View Prescription</Button>
           </Card>
         </Col>
@@ -176,29 +249,42 @@ export default function PatientDashboard() {
         {/* Medications */}
         <Col lg={4} md={12} className="mb-3">
           <Card className="p-3 h-100">
-            <Card.Title><FaPrescriptionBottle className="me-2" /> Medications</Card.Title>
+            <Card.Title>
+              <FaPrescriptionBottle className="me-2" /> Medications
+            </Card.Title>
             <Card.Text>
-              <strong>Current:</strong> Aspirin 75mg - 1x/day<br />
+              <strong>Current:</strong> Aspirin 75mg - 1x/day
+              <br />
               <strong>Past:</strong> Metformin 500mg - Completed
             </Card.Text>
-            <Button variant="primary" className="me-2">Request Refill</Button>
-            <Button variant="secondary" className="me-2"><FaFileDownload /> Download Prescription</Button>
+            <Button variant="primary" className="me-2">
+              Request Refill
+            </Button>
+            <Button variant="secondary" className="me-2">
+              <FaFileDownload /> Download Prescription
+            </Button>
             <Button variant="warning">Set Reminder</Button>
           </Card>
         </Col>
       </Row>
 
-      {/* Tabs */}
+      {/* Tabs Section */}
       <Tab.Container defaultActiveKey="messages">
         <Nav variant="tabs" className="mb-3">
           <Nav.Item>
-            <Nav.Link eventKey="messages"><FaEnvelope className="me-2" /> Messages</Nav.Link>
+            <Nav.Link eventKey="messages">
+              <FaEnvelope className="me-2" /> Messages
+            </Nav.Link>
           </Nav.Item>
           <Nav.Item>
-            <Nav.Link eventKey="reports"><FaFileDownload className="me-2" /> Health Reports</Nav.Link>
+            <Nav.Link eventKey="reports">
+              <FaFileDownload className="me-2" /> Health Reports
+            </Nav.Link>
           </Nav.Item>
           <Nav.Item>
-            <Nav.Link eventKey="billing"><FaCalendarAlt className="me-2" /> Billing / Insurance</Nav.Link>
+            <Nav.Link eventKey="billing">
+              <FaCalendarAlt className="me-2" /> Billing / Insurance
+            </Nav.Link>
           </Nav.Item>
         </Nav>
 
@@ -220,17 +306,25 @@ export default function PatientDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {messages.map(msg => (
+                    {messages.map((msg) => (
                       <tr key={msg.id}>
                         <td>{msg.fromName}</td>
                         <td>{msg.text}</td>
-                        <td><Badge bg={msg.read ? "success" : "warning"}>{msg.read ? "Read" : "Unread"}</Badge></td>
-                        <td><Button size="sm">View Conversation</Button></td>
+                        <td>
+                          <Badge bg={msg.read ? "success" : "warning"}>
+                            {msg.read ? "Read" : "Unread"}
+                          </Badge>
+                        </td>
+                        <td>
+                          <Button size="sm">View Conversation</Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </Table>
-              ) : <p>No messages found</p>}
+              ) : (
+                <p>No messages found</p>
+              )}
             </Card>
           </Tab.Pane>
 
@@ -251,7 +345,9 @@ export default function PatientDashboard() {
                     <td>Blood Test</td>
                     <td>10 Oct 2025</td>
                     <td>
-                      <Button size="sm" className="me-2"><FaFileDownload /> Download</Button>
+                      <Button size="sm" className="me-2">
+                        <FaFileDownload /> Download
+                      </Button>
                       <Button size="sm">Share with Doctor</Button>
                     </td>
                   </tr>
@@ -259,7 +355,9 @@ export default function PatientDashboard() {
                     <td>X-Ray</td>
                     <td>05 Oct 2025</td>
                     <td>
-                      <Button size="sm" className="me-2"><FaFileDownload /> Download</Button>
+                      <Button size="sm" className="me-2">
+                        <FaFileDownload /> Download
+                      </Button>
                       <Button size="sm">Share with Doctor</Button>
                     </td>
                   </tr>
@@ -285,14 +383,22 @@ export default function PatientDashboard() {
                   <tr>
                     <td>Consultation Fee</td>
                     <td>10 Oct 2025</td>
-                    <td><Badge bg="success">Paid</Badge></td>
-                    <td><Button size="sm">Download Invoice</Button></td>
+                    <td>
+                      <Badge bg="success">Paid</Badge>
+                    </td>
+                    <td>
+                      <Button size="sm">Download Invoice</Button>
+                    </td>
                   </tr>
                   <tr>
                     <td>Lab Test</td>
                     <td>05 Oct 2025</td>
-                    <td><Badge bg="warning">Pending</Badge></td>
-                    <td><Button size="sm">Pay Now</Button></td>
+                    <td>
+                      <Badge bg="warning">Pending</Badge>
+                    </td>
+                    <td>
+                      <Button size="sm">Pay Now</Button>
+                    </td>
                   </tr>
                 </tbody>
               </Table>
@@ -304,7 +410,7 @@ export default function PatientDashboard() {
       {/* Find a Doctor */}
       <h2 className="mb-4 mt-5">Find a Doctor</h2>
       <Row>
-        {filteredDoctors.map(doc => (
+        {filteredDoctors.map((doc) => (
           <Col md={4} key={doc.id} className="mb-3">
             <DoctorCard doctor={doc} onBook={() => handleBookAppointment(doc)} />
           </Col>
@@ -319,13 +425,18 @@ export default function PatientDashboard() {
         <Modal.Body>
           {selectedDoctor ? (
             <>
-              <p>Booking appointment with <strong>{selectedDoctor.name}</strong> ({selectedDoctor.specialty})</p>
+              <p>
+                Booking appointment with{" "}
+                <strong>{selectedDoctor.name}</strong> ({selectedDoctor.specialty})
+              </p>
               <Form onSubmit={handleConfirmBooking}>
                 <Form.Group className="mb-3">
                   <Form.Label>Select Date & Time</Form.Label>
                   <Form.Control type="datetime-local" name="datetime" required />
                 </Form.Group>
-                <Button variant="primary" type="submit">Confirm Booking</Button>
+                <Button variant="primary" type="submit">
+                  Confirm Booking
+                </Button>
               </Form>
             </>
           ) : (

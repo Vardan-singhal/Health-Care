@@ -8,8 +8,8 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import PatientDashboard from "./pages/PatientDashboard";
 import DoctorDashboard from "./pages/DoctorDashboard";
-// import Footer from "./components/Footer";
 import AppLayout from "./layouts/applayout";
+import ManageAppointments from "./pages/ManageAppointments"; // ✅ added import
 
 // PrivateRoute for protecting dashboard routes
 function PrivateRoute({ children, role }) {
@@ -60,6 +60,16 @@ function App() {
           }
         />
 
+        {/* ✅ Manage Appointments Page */}
+        <Route
+          path="/patient/appointments/manage"
+          element={
+            <PrivateRoute role="patient">
+              <ManageAppointments />
+            </PrivateRoute>
+          }
+        />
+
         {/* Doctor Dashboard */}
         <Route
           path="/doctor/*"
@@ -74,7 +84,6 @@ function App() {
 
         {/* Catch-all redirect */}
         <Route path="*" element={<Navigate to="/" />} />
-      {/* <Footer darkMode={darkMode} /> */}
       </Routes>
     </Router>
   );
