@@ -159,16 +159,7 @@ export default function AppNavbar({ role, page }) {
         </Dropdown.Menu>
       </Dropdown>
 
-      <Dropdown className="me-2">
-        <Dropdown.Toggle variant="light">
-          <FaUserCircle className="me-1" /> Patients
-        </Dropdown.Toggle>
-        <Dropdown.Menu>
-          <Dropdown.Item as={Link} to="/doctor/patients">All Patients</Dropdown.Item>
-          <Dropdown.Item as={Link} to="/doctor/patients/search">Search Patient</Dropdown.Item>
-          <Dropdown.Item as={Link} to="/doctor/patients/new">Add New Patient</Dropdown.Item>
-        </Dropdown.Menu>
-      </Dropdown>
+      
 
       <Nav.Link as={Link} to="/doctor/messages" className="me-2 d-flex align-items-center">
         <FaEnvelope className="me-1" /> Messages <Badge bg="danger" className="ms-1">5</Badge>

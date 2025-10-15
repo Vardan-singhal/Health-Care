@@ -1,13 +1,16 @@
 // src/pages/ManageAppointments.jsx
 import React, { useEffect, useState } from "react";
-import { Container, Button, Form, Row, Col, Spinner, Table } from "react-bootstrap";
+import { Container, Button, Form, Row, Col, Spinner, Table, Modal } from "react-bootstrap";
 import { db, auth } from "../api/firebase";
-import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, updateDoc } from "firebase/firestore";
 import { useSelector } from "react-redux";
-import { deleteDoc, doc, updateDoc } from "firebase/firestore";
+import { FaEnvelope } from "react-icons/fa";
+import { useNavigate } from "react-router-dom"; // <-- import useNavigate
 
 export default function ManageAppointments() {
   const { user } = useSelector((state) => state.auth);
+  const navigate = useNavigate(); // <-- initialize navigate
+
   const [doctors, setDoctors] = useState([]);
   const [doctorMap, setDoctorMap] = useState({});
   const [selectedDoctor, setSelectedDoctor] = useState("");
@@ -17,16 +20,20 @@ export default function ManageAppointments() {
   const [activeTab, setActiveTab] = useState("book");
   const [appointments, setAppointments] = useState([]);
 
+  // Messaging modal state
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [currentDoctorId, setCurrentDoctorId] = useState("");
+  const [messageText, setMessageText] = useState("");
+
+  // Fetch appointments
   const fetchAppointments = async () => {
     if (!user) return;
-    const q = query(
-      collection(db, "appointments"),
-      where("patientId", "==", user.uid)
-    );
+    const q = query(collection(db, "appointments"), where("patientId", "==", user.uid));
     const docs = await getDocs(q);
     setAppointments(docs.docs.map(doc => ({ id: doc.id, ...doc.data() })));
   };
 
+  // Fetch doctors and appointments
   useEffect(() => {
     const fetchDoctors = async () => {
       const q = query(collection(db, "users"), where("role", "==", "doctor"));
@@ -38,14 +45,13 @@ export default function ManageAppointments() {
         map[doc.id] = `${doc.name} (${doc.specialty})`;
       });
       setDoctorMap(map);
-      
     };
     fetchDoctors();
     if (activeTab === "manage") fetchAppointments();
     // eslint-disable-next-line
   }, [activeTab, user]);
-  
-// Book Appointment
+
+  // Book appointment
   const handleBook = async (e) => {
     e.preventDefault();
     if (!selectedDoctor || !date || !time) return alert("All fields required");
@@ -70,15 +76,16 @@ export default function ManageAppointments() {
       setLoading(false);
     }
   };
-//   Cancel Appointment
-   const handleCancel = async (appointmentId) => {
+
+  // Cancel appointment
+  const handleCancel = async (appointmentId) => {
     if (!window.confirm("Cancel this appointment?")) return;
     await deleteDoc(doc(db, "appointments", appointmentId));
     alert("Appointment cancelled.");
     fetchAppointments();
   };
 
-  // ---- RESCHEDULE APPOINTMENT ----
+  // Reschedule appointment
   const handleReschedule = async (appointmentId) => {
     const newDate = prompt("Enter new date (YYYY-MM-DD):");
     const newTime = prompt("Enter new time (HH:MM):");
@@ -95,14 +102,9 @@ export default function ManageAppointments() {
     fetchAppointments();
   };
 
-//   return (
-//     <Container className="my-4">
-//       <h3 className="mb-4">
-//         {activeTab === "book" ? "Book an Appointment" : "Manage Your Appointments"}
-//       </h3>)
-
   return (
     <Container className="my-4">
+      {/* Tabs */}
       <div className="mb-3">
         <Button
           variant={activeTab === "book" ? "primary" : "outline-primary"}
@@ -118,39 +120,44 @@ export default function ManageAppointments() {
           Manage Appointments
         </Button>
       </div>
-      <Form onSubmit={handleBook}>
-        <Row className="mb-3">
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label>Select Doctor</Form.Label>
-              <Form.Select value={selectedDoctor} onChange={(e) => setSelectedDoctor(e.target.value)}>
-                <option value="">Choose...</option>
-                {doctors.map((doc) => (
-                  <option key={doc.id} value={doc.id}>
-                    {doc.name} ({doc.specialty})
-                  </option>
-                ))}
-              </Form.Select>
-            </Form.Group>
-          </Col>
-          <Col md={3}>
-            <Form.Group>
-              <Form.Label>Date</Form.Label>
-              <Form.Control type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </Form.Group>
-          </Col>
-          <Col md={3}>
-            <Form.Group>
-              <Form.Label>Time</Form.Label>
-              <Form.Control type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-            </Form.Group>
-          </Col>
-        </Row>
-        <Button type="submit" disabled={loading}>
-          {loading ? <Spinner size="sm" /> : "Book Appointment"}
-        </Button>
-      </Form>
-        {/* ---- MANAGE SECTION ---- */}
+
+      {/* Book Appointment */}
+      {activeTab === "book" && (
+        <Form onSubmit={handleBook}>
+          <Row className="mb-3">
+            <Col md={6}>
+              <Form.Group>
+                <Form.Label>Select Doctor</Form.Label>
+                <Form.Select value={selectedDoctor} onChange={(e) => setSelectedDoctor(e.target.value)}>
+                  <option value="">Choose...</option>
+                  {doctors.map((doc) => (
+                    <option key={doc.id} value={doc.id}>
+                      {doc.name} ({doc.specialty})
+                    </option>
+                  ))}
+                </Form.Select>
+              </Form.Group>
+            </Col>
+            <Col md={3}>
+              <Form.Group>
+                <Form.Label>Date</Form.Label>
+                <Form.Control type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              </Form.Group>
+            </Col>
+            <Col md={3}>
+              <Form.Group>
+                <Form.Label>Time</Form.Label>
+                <Form.Control type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+              </Form.Group>
+            </Col>
+          </Row>
+          <Button type="submit" disabled={loading}>
+            {loading ? <Spinner size="sm" /> : "Book Appointment"}
+          </Button>
+        </Form>
+      )}
+
+      {/* Manage Appointments */}
       {activeTab === "manage" && (
         <>
           {appointments.length === 0 ? (
@@ -185,9 +192,17 @@ export default function ManageAppointments() {
                       <Button
                         variant="danger"
                         size="sm"
+                        className="me-2"
                         onClick={() => handleCancel(a.id)}
                       >
                         Cancel
+                      </Button>
+                      <Button
+                        variant="info"
+                        size="sm"
+                        onClick={() => navigate("/patient/messages", { state: { doctorId: a.doctorId } })}
+                      >
+                        <FaEnvelope className="me-1" /> Message
                       </Button>
                     </td>
                   </tr>
@@ -200,4 +215,3 @@ export default function ManageAppointments() {
     </Container>
   );
 }
-    

@@ -39,6 +39,8 @@ import {
   doc,
   getDoc,
   onSnapshot,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { useSelector } from "react-redux";
 
@@ -56,8 +58,42 @@ export default function PatientDashboard() {
   const [loadingAppointments, setLoadingAppointments] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [patientName, setPatientName] = useState("");
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [messageText, setMessageText] = useState("");
+  const [selectedAppointment, setSelectedAppointment] = useState(null);
 
-  // ✅ Safely convert Firestore Timestamp to JS Date
+  const handleOpenMessageModal = (appointment) => {
+    setSelectedAppointment(appointment);
+    setShowMessageModal(true);
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!messageText.trim()) return alert("Please enter a message");
+    if (!selectedAppointment) return;
+
+    try {
+      await addDoc(collection(db, "messages"), {
+        patientId: user.uid,
+        doctorId: selectedAppointment.doctorId,
+        patientName: patientName,
+        doctorName: selectedAppointment.doctorName,
+        text: messageText.trim(),
+        time: serverTimestamp(), // use serverTimestamp for proper ordering
+        read: false,
+        fromDoctor: false,
+      });
+
+      alert("Message sent successfully!");
+      setMessageText("");
+      setShowMessageModal(false);
+    } catch (err) {
+      console.error("Error sending message:", err);
+      alert("Failed to send message. Try again later.");
+    }
+  };
+
+  // Convert Firestore Timestamp to JS Date
   const toJSDate = (date) => {
     if (!date) return null;
     if (date.seconds) return new Date(date.seconds * 1000);
@@ -107,7 +143,7 @@ export default function PatientDashboard() {
     setFilteredDoctors(filtered);
   }, [search, doctors]);
 
-  // ✅ Real-time Fetch of Approved Appointments
+  // Real-time Fetch of Approved Appointments
   useEffect(() => {
     if (!user?.uid) return;
     setLoadingAppointments(true);
@@ -138,26 +174,40 @@ export default function PatientDashboard() {
     return () => unsubscribe();
   }, [user]);
 
-  // Fetch messages
+  // ✅ Real-time messages synchronization
   useEffect(() => {
-    const fetchMessages = async () => {
-      setLoadingMessages(true);
-      try {
-        const q = query(
-          collection(db, "messages"),
-          where("patientId", "==", user.uid),
-          orderBy("time", "desc")
-        );
-        const snap = await getDocs(q);
-        const msgList = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    if (!user?.uid) return;
+    setLoadingMessages(true);
+
+    const q = query(
+      collection(db, "messages"),
+      where("patientId", "==", user.uid),
+      orderBy("time", "desc")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const msgList = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
+        // Mark unread messages from doctor as read
+        msgList.forEach(async (msg) => {
+          if (msg.fromDoctor && !msg.read) {
+            const msgRef = doc(db, "messages", msg.id);
+            await updateDoc(msgRef, { read: true });
+          }
+        });
+
         setMessages(msgList);
-      } catch (err) {
+        setLoadingMessages(false);
+      },
+      (err) => {
         console.error("Error fetching messages:", err);
-      } finally {
         setLoadingMessages(false);
       }
-    };
-    fetchMessages();
+    );
+
+    return () => unsubscribe();
   }, [user.uid]);
 
   // Book appointment modal
@@ -230,7 +280,7 @@ export default function PatientDashboard() {
           </Card>
         </Col>
 
-        {/* ✅ Updated Appointments Card */}
+        {/* Appointments Card */}
         <Col lg={4} md={6} className="mb-3">
           <Card className="p-3 h-100">
             <Card.Title>
@@ -295,6 +345,7 @@ export default function PatientDashboard() {
           </Card>
         </Col>
       </Row>
+
       {/* Tabs Section */}
       <Tab.Container defaultActiveKey="messages">
         <Nav variant="tabs" className="mb-3">
@@ -335,7 +386,7 @@ export default function PatientDashboard() {
                   <tbody>
                     {messages.map((msg) => (
                       <tr key={msg.id}>
-                        <td>{msg.fromName}</td>
+                        <td>{msg.fromDoctor ? msg.doctorName : msg.patientName}</td>
                         <td>{msg.text}</td>
                         <td>
                           <Badge bg={msg.read ? "success" : "warning"}>
@@ -343,7 +394,14 @@ export default function PatientDashboard() {
                           </Badge>
                         </td>
                         <td>
-                          <Button size="sm">View Conversation</Button>
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              (window.location.href = `/patient/messages/${msg.doctorId}`)
+                            }
+                          >
+                            View Conversation
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -437,17 +495,17 @@ export default function PatientDashboard() {
       {/* Find a Doctor */}
       <h2 className="mb-4 mt-5">Find a Doctor</h2>
       <Col md={4}>
-          <InputGroup className="my-3">
-            <FormControl
-              placeholder="Search doctors by name, city, hospital, specialty..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <InputGroup.Text>
-              <FaSearch />
-            </InputGroup.Text>
-          </InputGroup>
-        </Col>
+        <InputGroup className="my-3">
+          <FormControl
+            placeholder="Search doctors by name, city, hospital, specialty..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <InputGroup.Text>
+            <FaSearch />
+          </InputGroup.Text>
+        </InputGroup>
+      </Col>
       <Row>
         {filteredDoctors.map((doc) => (
           <Col md={4} key={doc.id} className="mb-3">

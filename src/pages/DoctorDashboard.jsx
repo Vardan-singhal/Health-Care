@@ -13,6 +13,8 @@ import {
   InputGroup,
   FormControl,
   Spinner,
+  Modal,
+  Form,
 } from "react-bootstrap";
 import {
   FaUserMd,
@@ -31,6 +33,7 @@ import {
   getDocs,
   updateDoc,
   onSnapshot,
+  addDoc,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 
@@ -42,12 +45,16 @@ export default function DoctorDashboard() {
   const [key, setKey] = useState("appointments");
   const [replyText, setReplyText] = useState({});
   const [loading, setLoading] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(true);
+  const [showReplyModal, setShowReplyModal] = useState(false);
+  const [currentMessage, setCurrentMessage] = useState(null);
 
-  // Fetch doctor profile + live appointments
+  const user = auth.currentUser;
+
+  // Fetch doctor profile + live appointments + messages
   useEffect(() => {
     const fetchDoctorData = async () => {
       try {
-        const user = auth.currentUser;
         if (!user) {
           navigate("/login");
           return;
@@ -65,8 +72,7 @@ export default function DoctorDashboard() {
           collection(db, "appointments"),
           where("doctorId", "==", user.uid)
         );
-
-        const unsubscribe = onSnapshot(apptQuery, async (snapshot) => {
+        const unsubscribeAppt = onSnapshot(apptQuery, async (snapshot) => {
           const data = await Promise.all(
             snapshot.docs.map(async (d) => {
               const appointment = { id: d.id, ...d.data() };
@@ -91,32 +97,43 @@ export default function DoctorDashboard() {
               return appointment;
             })
           );
-
           setAppointments(data);
           setLoading(false);
         });
 
-        // Fetch messages
+        // Real-time messages listener
         const msgQuery = query(
           collection(db, "messages"),
           where("doctorId", "==", user.uid)
         );
-        const msgSnap = await getDocs(msgQuery);
-        const msgs = msgSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-          time: doc.data().time?.toDate?.(),
-        }));
-        setMessages(msgs);
+        const unsubscribeMsg = onSnapshot(
+          msgQuery,
+          (snapshot) => {
+            const msgs = snapshot.docs.map((doc) => ({
+              id: doc.id,
+              ...doc.data(),
+              time: doc.data().time?.toDate?.() || new Date(doc.data().time),
+            }));
+            setMessages(msgs);
+            setLoadingMessages(false);
+          },
+          (error) => {
+            console.error("Error fetching messages:", error);
+            setLoadingMessages(false);
+          }
+        );
 
-        return () => unsubscribe();
+        return () => {
+          unsubscribeAppt();
+          unsubscribeMsg();
+        };
       } catch (err) {
         console.error(err);
       }
     };
 
     fetchDoctorData();
-  }, [navigate]);
+  }, [navigate, user]);
 
   // Update appointment status
   const handleStatusChange = async (id, newStatus) => {
@@ -128,6 +145,41 @@ export default function DoctorDashboard() {
     }
   };
 
+  // Open reply modal
+  const handleReply = (msg) => {
+    setCurrentMessage(msg);
+    setReplyText("");
+    setShowReplyModal(true);
+
+    // Mark message as read
+    if (!msg.read) {
+      const msgRef = doc(db, "messages", msg.id);
+      updateDoc(msgRef, { read: true }).catch(console.error);
+    }
+  };
+
+  // Send reply to patient
+  const handleSendReplyModal = async () => {
+    if (!replyText || !currentMessage) return alert("Enter a reply message");
+
+    try {
+      await addDoc(collection(db, "messages"), {
+        patientId: currentMessage.patientId,
+        doctorId: user.uid,
+        fromDoctor: true,
+        text: replyText,
+        time: new Date(),
+        read: false,
+        doctorName: doctorProfile.name,
+      });
+      setShowReplyModal(false);
+      alert("Reply sent!");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to send reply");
+    }
+  };
+
   const handleLogout = async () => {
     await auth.signOut();
     navigate("/");
@@ -135,12 +187,7 @@ export default function DoctorDashboard() {
 
   const handleEditProfile = () => alert("Edit Profile clicked!");
   const handleAddAvailability = () => alert("Add Availability clicked!");
-  const handleSendMessage = () => alert("Send Message clicked!");
   const handleDownloadReports = () => alert("Download Reports clicked!");
-  const handleSendReply = (msgId) => {
-    alert(`Reply to message ${msgId}: ${replyText[msgId]}`);
-    setReplyText((prev) => ({ ...prev, [msgId]: "" }));
-  };
 
   if (!doctorProfile) return <p>Loading doctor data...</p>;
 
@@ -239,10 +286,10 @@ export default function DoctorDashboard() {
               <Button
                 variant="info"
                 className="w-100 mb-2"
-                onClick={handleSendMessage}
+                onClick={() => setKey("messages")}
               >
                 <FaEnvelope className="me-2" />
-                Send Message
+                Messages
               </Button>
               <Button
                 variant="dark"
@@ -339,39 +386,36 @@ export default function DoctorDashboard() {
             {/* Messages */}
             <Tab eventKey="messages" title="Messages">
               <h5>Patient Messages</h5>
-              <ListGroup>
-                {messages.map((msg) => (
-                  <ListGroup.Item
-                    key={msg.id}
-                    className={msg.read ? "" : "bg-light"}
-                  >
-                    <strong>{msg.patientName}</strong> - {msg.text} <br />
-                    <small className="text-muted">
-                      {msg.time?.toLocaleString()}
-                    </small>
-                    <div className="mt-1">
-                      <InputGroup>
-                        <FormControl
-                          placeholder="Reply..."
-                          value={replyText[msg.id] || ""}
-                          onChange={(e) =>
-                            setReplyText((prev) => ({
-                              ...prev,
-                              [msg.id]: e.target.value,
-                            }))
-                          }
-                        />
+              {loadingMessages ? (
+                <div className="text-center my-4">
+                  <Spinner animation="border" />
+                </div>
+              ) : messages.length === 0 ? (
+                <p>No messages found.</p>
+              ) : (
+                <ListGroup>
+                  {messages.map((msg) => (
+                    <ListGroup.Item
+                      key={msg.id}
+                      className={msg.read ? "" : "bg-light"}
+                    >
+                      <strong>{msg.patientName || "Patient"}</strong> - {msg.text} <br />
+                      <small className="text-muted">
+                        {msg.time?.toLocaleString()}
+                      </small>
+                      <div className="mt-2">
                         <Button
+                          size="sm"
                           variant="primary"
-                          onClick={() => handleSendReply(msg.id)}
+                          onClick={() => handleReply(msg)}
                         >
-                          Send
+                          Reply
                         </Button>
-                      </InputGroup>
-                    </div>
-                  </ListGroup.Item>
-                ))}
-              </ListGroup>
+                      </div>
+                    </ListGroup.Item>
+                  ))}
+                </ListGroup>
+              )}
             </Tab>
 
             {/* Calendar */}
@@ -388,6 +432,33 @@ export default function DoctorDashboard() {
           </Tabs>
         </Col>
       </Row>
+
+      {/* Reply Modal */}
+      <Modal show={showReplyModal} onHide={() => setShowReplyModal(false)}>
+        <Modal.Header closeButton>
+          <Modal.Title>Reply to {currentMessage?.patientName || "Patient"}</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form.Group>
+            <Form.Label>Message</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={4}
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="Type your reply..."
+            />
+          </Form.Group>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowReplyModal(false)}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={handleSendReplyModal}>
+            Send Reply
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </Container>
   );
 }

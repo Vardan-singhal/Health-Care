@@ -1,75 +1,229 @@
 // src/pages/PatientMessages.jsx
-import React, { useEffect, useState } from "react";
-import { Container, ListGroup, InputGroup, FormControl, Button } from "react-bootstrap";
+import React, { useEffect, useState, useRef } from "react";
+import {
+  Container,
+  Row,
+  Col,
+  ListGroup,
+  InputGroup,
+  FormControl,
+  Button,
+  Card,
+  Spinner,
+} from "react-bootstrap";
 import { db } from "../api/firebase";
-import { collection, query, where, getDocs, addDoc, updateDoc, doc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  doc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { useSelector } from "react-redux";
+import { useLocation } from "react-router-dom";
 
 export default function PatientMessages() {
   const { user } = useSelector((state) => state.auth);
-  const [messages, setMessages] = useState([]);
-  const [replyText, setReplyText] = useState({});
+  const location = useLocation();
+  const doctorFromNav = location.state?.doctorId || null;
 
-  const fetchMessages = async () => {
-    if (!user) return;
-    const q = query(collection(db, "messages"), where("patientId", "==", user.uid));
-    const msgSnap = await getDocs(q);
-    setMessages(msgSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+  const [messages, setMessages] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [selectedDoctor, setSelectedDoctor] = useState(doctorFromNav);
+  const [replyText, setReplyText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const chatEndRef = useRef(null);
+
+  // Scroll to bottom whenever messages change
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
+  useEffect(scrollToBottom, [messages]);
 
   useEffect(() => {
-    fetchMessages();
-  }, [user]);
+    if (!user?.uid) return;
 
-  const handleSendReply = async (msgId, doctorId) => {
-    const text = replyText[msgId];
-    if (!text) return alert("Enter a message");
+    const messagesRef = collection(db, "messages");
+    const q = query(
+      messagesRef,
+      where("patientId", "==", user.uid),
+      orderBy("time", "asc")
+    );
 
-    // Add new message document for doctor
-    await addDoc(collection(db, "messages"), {
-      patientId: user.uid,
-      doctorId,
-      text,
-      read: false,
-      time: new Date(),
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      async (snapshot) => {
+        const msgs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
 
-    // Optionally mark original message as read
-    const msgRef = doc(db, "messages", msgId);
-    await updateDoc(msgRef, { read: true });
+        // Mark unread messages from doctor as read
+        await Promise.all(
+          msgs.map(async (msg) => {
+            if (msg.fromDoctor && !msg.read) {
+              const msgRef = doc(db, "messages", msg.id);
+              await updateDoc(msgRef, { read: true });
+            }
+          })
+        );
 
-    setReplyText(prev => ({ ...prev, [msgId]: "" }));
-    fetchMessages();
+        setMessages(msgs);
+
+        // Extract unique doctors
+        const doctorMap = {};
+        msgs.forEach((msg) => {
+          if (msg.doctorId) doctorMap[msg.doctorId] = msg.doctorName || msg.doctorId;
+        });
+        setDoctors(Object.entries(doctorMap).map(([id, name]) => ({ id, name })));
+
+        // Auto-select first doctor if none selected
+        if (!selectedDoctor || !doctorMap[selectedDoctor]) {
+          setSelectedDoctor(doctorFromNav || Object.keys(doctorMap)[0] || null);
+        }
+
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching messages:", error);
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user, selectedDoctor, doctorFromNav]);
+
+  // Send message
+  const handleSendReply = async () => {
+    if (!replyText || !selectedDoctor) return alert("Enter a message");
+
+    try {
+      await addDoc(collection(db, "messages"), {
+        patientId: user.uid,
+        doctorId: selectedDoctor,
+        text: replyText,
+        fromDoctor: false,
+        read: false,
+        time: serverTimestamp(),
+        doctorName: doctors.find((d) => d.id === selectedDoctor)?.name,
+      });
+      setReplyText("");
+    } catch (err) {
+      console.error("Error sending message:", err);
+      alert("Failed to send message.");
+    }
   };
 
+  // Filter messages for selected doctor
+  const filteredMessages = messages.filter(
+    (msg) => msg.doctorId === selectedDoctor
+  );
+
   return (
-    <Container className="my-4">
-      <h3>Messages</h3>
-      {messages.length === 0 ? <p>No messages yet.</p> : (
-        <ListGroup>
-          {messages.map(msg => (
-            <ListGroup.Item key={msg.id} className={msg.read ? "" : "bg-light"}>
-              <strong>From Dr. {msg.doctorId}</strong>: {msg.text} <br />
-              <small className="text-muted">{msg.time?.toDate ? msg.time.toDate().toLocaleString() : "—"}</small>
-              <div className="mt-2">
-                <InputGroup>
-                  <FormControl
-                    placeholder="Reply..."
-                    value={replyText[msg.id] || ""}
-                    onChange={e => setReplyText(prev => ({ ...prev, [msg.id]: e.target.value }))}
-                  />
-                  <Button
-                    variant="primary"
-                    onClick={() => handleSendReply(msg.id, msg.doctorId)}
+    <Container fluid className="my-4">
+      <Row>
+        {/* Left Panel - Doctors list */}
+        <Col md={3}>
+          <Card>
+            <Card.Header>Doctors</Card.Header>
+            <ListGroup variant="flush">
+              {loading ? (
+                <Spinner animation="border" className="m-3" />
+              ) : doctors.length === 0 ? (
+                <ListGroup.Item>No chats yet</ListGroup.Item>
+              ) : (
+                doctors.map((doc) => (
+                  <ListGroup.Item
+                    key={doc.id}
+                    action
+                    active={doc.id === selectedDoctor}
+                    onClick={() => setSelectedDoctor(doc.id)}
                   >
-                    Send
-                  </Button>
-                </InputGroup>
-              </div>
-            </ListGroup.Item>
-          ))}
-        </ListGroup>
-      )}
+                    {doc.name}
+                  </ListGroup.Item>
+                ))
+              )}
+            </ListGroup>
+          </Card>
+        </Col>
+
+        {/* Right Panel - Chat */}
+        <Col
+          md={9}
+          style={{ display: "flex", flexDirection: "column", height: "80vh" }}
+        >
+          <Card
+            style={{
+              flex: 1,
+              overflowY: "auto",
+              marginBottom: "10px",
+              padding: "10px",
+            }}
+          >
+            <Card.Header>
+              Chat with {doctors.find((d) => d.id === selectedDoctor)?.name || "—"}
+            </Card.Header>
+            <Card.Body>
+              {loading ? (
+                <div className="text-center my-3">
+                  <Spinner animation="border" />
+                </div>
+              ) : filteredMessages.length === 0 ? (
+                <p>No messages yet.</p>
+              ) : (
+                filteredMessages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    style={{
+                      textAlign: msg.fromDoctor ? "left" : "right",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "inline-block",
+                        padding: "8px 12px",
+                        borderRadius: "15px",
+                        backgroundColor: msg.fromDoctor ? "#f1f0f0" : "#007bff",
+                        color: msg.fromDoctor ? "#000" : "#fff",
+                        maxWidth: "70%",
+                        wordWrap: "break-word",
+                      }}
+                    >
+                      {msg.text}
+                    </div>
+                    <br />
+                    <small className="text-muted">
+                      {msg.time?.toDate
+                        ? msg.time.toDate().toLocaleString()
+                        : msg.time
+                        ? new Date(msg.time.seconds * 1000).toLocaleString()
+                        : ""}
+                    </small>
+                  </div>
+                ))
+              )}
+              <div ref={chatEndRef} />
+            </Card.Body>
+          </Card>
+
+          {/* Reply Input */}
+          <InputGroup>
+            <FormControl
+              placeholder="Type a message..."
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              onKeyPress={(e) => {
+                if (e.key === "Enter") handleSendReply();
+              }}
+            />
+            <Button variant="primary" onClick={handleSendReply}>
+              Send
+            </Button>
+          </InputGroup>
+        </Col>
+      </Row>
     </Container>
   );
 }
